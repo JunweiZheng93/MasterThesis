@@ -28,3 +28,5 @@ venv.bak/
 profile_default/
 ipython_config.py
 
+# Dataset
+dataset/
