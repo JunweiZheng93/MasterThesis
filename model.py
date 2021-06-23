@@ -80,12 +80,13 @@ class Decomposer(keras.layers.Layer):
             self.projection_layer_list.append(Projection())
 
     def call(self, inputs, training=False):
+        # TODO: mix the different parts
         projection_layer_outputs = list()
         x = self.binary_shape_encoder(inputs, training=training)
         for each_layer in self.projection_layer_list:
             projection_layer_outputs.append(each_layer(x))
-        # outputs should be a tensor in the shape of (num_parts, batch_size, encoding_dimensions)
-        outputs = tf.constant(projection_layer_outputs)
+        # outputs should be a tuple, whose element is in the shape of (batch_size, encoding_dimensions)
+        outputs = tuple(projection_layer_outputs)
         return outputs
 
 
@@ -167,11 +168,60 @@ class SharedPartDecoder(keras.layers.Layer):
 
 class LocalizationNet(keras.layers.Layer):
 
-    def __init__(self, **kwargs):
+    def __init__(self, num_parts, **kwargs):
         super(LocalizationNet, self).__init__(**kwargs)
 
-    def build(self, input_shape):
-        pass
+        # the shape of the stacked input should be (B, num_parts, H, W, D, C)
+        # the shape of the summed input should be (B, encoding_dimensions)
+        self.stacked_flat = layers.Flatten()
+
+        self.stacked_fc1 = layers.Dense(256)
+        self.stacked_fc2 = layers.Dense(256)
+        self.summed_fc1 = layers.Dense(128)
+        self.final_fc1 = layers.Dense(128)
+        self.final_fc2 = layers.Dense(12*num_parts)
+
+        self.stacked_act1 = layers.ReLU()
+        self.stacked_act2 = layers.ReLU()
+        self.summed_act1 = layers.ReLU()
+        self.final_act1 = layers.ReLU()
+
+        self.stacked_dropout1 = layers.Dropout(0.3)
+        self.stacked_dropout2 = layers.Dropout(0.3)
+        self.summed_dropout1 = layers.Dropout(0.3)
+        self.final_dropout1 = layers.Dropout(0.3)
+
+    def call(self, inputs, training=False):
+
+        # processing stacked inputs
+        stacked_x = self.stacked_flat(inputs)
+        stacked_x = self.stacked_fc1(stacked_x)
+        stacked_x = self.stacked_act1(stacked_x)
+        stacked_x = self.stacked_dropout1(stacked_x, training=training)
+        stacked_x = self.stacked_fc2(stacked_x)
+        stacked_x = self.stacked_act2(stacked_x)
+        stacked_x = self.stacked_dropout2(stacked_x, training=training)
+
+        # processing summed inputs
+        summed_x = self.summed_fc1(inputs)
+        summed_x = self.summed_act1(summed_x)
+        summed_x = self.summed_dropout1(summed_x, training=training)
+
+        # concatenate stacked inputs and summed inputs into final inputs
+        final_x = tf.concat([stacked_x, summed_x], axis=0)
+        final_x = self.final_fc1(final_x)
+        final_x = self.final_act1(final_x)
+        final_x = self.final_dropout1(final_x, training=training)
+        final_x = self.final_fc2(final_x)
+
+        # the shape of final_x should be (B, 12*num_parts)
+        return final_x
+
+
+class Resampling(keras.layers.Layer):
+
+    def __init__(self, **kwargs):
+        super(Resampling, self).__init__(**kwargs)
 
     def call(self, inputs, training=False):
         if training:
@@ -184,9 +234,6 @@ class STN(keras.layers.Layer):
 
     def __init__(self, **kwargs):
         super(STN, self).__init__(**kwargs)
-
-    def build(self, input_shape):
-        pass
 
     def call(self, inputs, training=False):
         if training:
