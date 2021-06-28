@@ -401,26 +401,40 @@ class Resampling(keras.layers.Layer):
 
 class STN(keras.layers.Layer):
 
-    def __init__(self, **kwargs):
+    def __init__(self, num_parts, **kwargs):
         super(STN, self).__init__(**kwargs)
+        self.localizationnet = LocalizationNet(num_parts)
+        self.resampling = Resampling()
 
     def call(self, inputs, training=False):
-        if training:
-            pass
-        else:
-            pass
+        input_fmap = inputs[0]
+        theta = self.localizationnet(inputs, training=training)
+        resampling_inputs = (input_fmap, theta)
+        output_fmap = self.resampling(resampling_inputs)
+        return output_fmap
 
 
 class Composer(keras.layers.Layer):
 
-    def __init__(self, **kwargs):
+    def __init__(self, num_parts, **kwargs):
         super(Composer, self).__init__(**kwargs)
+        self.part_decoder = SharedPartDecoder()
+        self.stn = STN(num_parts)
 
     def call(self, inputs, training=False):
-        if training:
-            pass
-        else:
-            pass
+        decoder_outputs = list()
+        for each in inputs:
+            decoder_outputs.append(self.part_decoder(each, training=training))
+
+        # stacked_decoded_part should be in the shape of (B, num_parts, H, W, D, C)
+        stacked_decoded_parts = tf.stack(decoder_outputs, axis=1)
+        # summed_inputs should be in the shape of (B, encoding_dims)
+        summed_inputs = tf.math.add_n(inputs)
+        localization_inputs = (stacked_decoded_parts, summed_inputs)
+        # output_fmap has shape (B, num_parts, H, W, D, C)
+        output_fmap = self.stn(localization_inputs, training=training)
+
+        return output_fmap
 
 
 class Model(keras.Model):
