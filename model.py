@@ -1,4 +1,5 @@
 import tensorflow as tf
+import numpy as np
 from tensorflow import keras
 from tensorflow.keras import layers
 
@@ -71,22 +72,20 @@ class Projection(keras.layers.Layer):
 
 class Decomposer(keras.layers.Layer):
 
-    def __init__(self, num_partrs, **kwargs):
+    def __init__(self, num_parts, **kwargs):
         super(Decomposer, self).__init__(**kwargs)
         self.projection_layer_list = list()
-
         self.binary_shape_encoder = BinaryShapeEncoder()
-        for i in range(num_partrs):
+        for i in range(num_parts):
             self.projection_layer_list.append(Projection())
 
     def call(self, inputs, training=False):
-        # TODO: mix the different parts
         projection_layer_outputs = list()
         x = self.binary_shape_encoder(inputs, training=training)
         for each_layer in self.projection_layer_list:
             projection_layer_outputs.append(each_layer(x))
-        # outputs should be a tuple, whose element is in the shape of (batch_size, encoding_dimensions)
-        outputs = tuple(projection_layer_outputs)
+        # outputs should be in the shape of (num_parts, B, encoding_dimensions)
+        outputs = tf.convert_to_tensor(projection_layer_outputs)
         return outputs
 
 
@@ -180,7 +179,7 @@ class LocalizationNet(keras.layers.Layer):
         self.stacked_fc2 = layers.Dense(256)
         self.summed_fc1 = layers.Dense(128)
         self.final_fc1 = layers.Dense(128)
-        self.final_fc2 = layers.Dense(12*num_parts)
+        self.final_fc2 = layers.Dense(num_parts*12)
 
         self.stacked_act1 = layers.ReLU()
         self.stacked_act2 = layers.ReLU()
@@ -218,7 +217,7 @@ class LocalizationNet(keras.layers.Layer):
         final_x = self.final_dropout1(final_x, training=training)
         final_x = self.final_fc2(final_x)
 
-        # the shape of final_x should be (B, 12*num_parts)
+        # the shape of final_x should be (B, num_parts*12)
         return final_x
 
 
@@ -230,7 +229,7 @@ class Resampling(keras.layers.Layer):
     def call(self, inputs):
 
         # input_fmap has shape (B, num_parts, H, W, D, C)
-        # theta has shape (B, 12*num_parts)
+        # theta has shape (B, num_parts*12)
         input_fmap = inputs[0]
         theta = inputs[1]
 
@@ -251,7 +250,7 @@ class Resampling(keras.layers.Layer):
     def _affine_grid_generator(input_fmap, theta):
         """
         :param input_fmap: the stacked decoded parts in the shape of (B, num_parts, H, W, D, C)
-        :param theta: the output of LocalizationNet. has shape (B, 12*num_parts)
+        :param theta: the output of LocalizationNet. has shape (B, num_parts*12)
         :return: affine grid for the input feature map. affine grid has shape (B, num_parts, 3, H, W, D)
         """
 
@@ -408,8 +407,8 @@ class STN(keras.layers.Layer):
 
     def call(self, inputs, training=False):
         input_fmap = inputs[0]
-        theta = self.localizationnet(inputs, training=training)
-        resampling_inputs = (input_fmap, theta)
+        self.theta = self.localizationnet(inputs, training=training)
+        resampling_inputs = (input_fmap, self.theta)
         output_fmap = self.resampling(resampling_inputs)
         return output_fmap
 
@@ -427,30 +426,207 @@ class Composer(keras.layers.Layer):
             decoder_outputs.append(self.part_decoder(each, training=training))
 
         # stacked_decoded_part should be in the shape of (B, num_parts, H, W, D, C)
-        stacked_decoded_parts = tf.stack(decoder_outputs, axis=1)
+        self.stacked_decoded_parts = tf.stack(decoder_outputs, axis=1)
         # summed_inputs should be in the shape of (B, encoding_dims)
-        summed_inputs = tf.math.add_n(inputs)
-        localization_inputs = (stacked_decoded_parts, summed_inputs)
+        summed_inputs = tf.reduce_sum(inputs, axis=0)
+        localization_inputs = (self.stacked_decoded_parts, summed_inputs)
         # output_fmap has shape (B, num_parts, H, W, D, C)
         output_fmap = self.stn(localization_inputs, training=training)
-
-        return output_fmap
+        # reconstructed model shape has the shape of (B, H, W, D, C)
+        reconstructed_shape = tf.reduce_sum(output_fmap, axis=1)
+        reconstructed_shape = tf.where(reconstructed_shape >= 0.5, 1, 0)
+        return reconstructed_shape
 
 
 class Model(keras.Model):
 
-    def __init__(self, **kwargs):
+    def __init__(self, num_parts, **kwargs):
         super(Model, self).__init__(**kwargs)
+        self.num_parts = num_parts
+        self.training_process = None
 
-    def customized_loss(self):
-        pass
+        self.decomposer = Decomposer(num_parts)
+        self.composer = Composer(num_parts)
 
-    def call(self, inputs, training=False):
-        pass
+        # create some loss tracker
+        self.pi_loss_tracker = tf.keras.metrics.Mean()
+        self.part_reconstruction_loss_tracker = tf.keras.metrics.Mean()
+        self.transformation_loss_tracker = tf.keras.metrics.Mean()
+        self.cycle_loss_tracker = tf.keras.metrics.Mean()
+        self.total_loss_tracker = tf.keras.metrics.Mean()
+
+    def choose_training_process(self, training_process):
+        self.training_process = training_process
+
+    def _cal_pi_loss(self):
+        params = list()
+        for each_layer in self.decomposer.projection_layer_list:
+            params = params.append(each_layer.trainable_weights[0])
+        # params should be list of tensor, whose elements are the trainable weights of Projection layer
+        params_tensor = tf.convert_to_tensor(params)
+        # params_tensor has shape (num_parts, encoding_dims, encoding_dims)
+        pi_loss1 = tf.reduce_sum(tf.norm(params_tensor ** 2 - params_tensor, axis=[-2, -1]) ** 2)
+        pi_loss2 = list()
+        for idx, each_param in enumerate(params_tensor):
+            unstack_params = tf.unstack(params_tensor, axis=0)
+            del unstack_params[idx]
+            new_params = tf.convert_to_tensor(unstack_params)
+            pi_loss2.append(tf.norm(each_param * new_params, axis=[-2, -1]) ** 2)
+        pi_loss2 = tf.reduce_sum(pi_loss2)
+        pi_loss3 = tf.norm(tf.reduce_sum(params_tensor, axis=0) - tf.eye(tf.shape(params_tensor)[1])) ** 2
+        return pi_loss1 + pi_loss2 + pi_loss3
+
+    @staticmethod
+    def _cal_part_reconstruction_loss(gt, pred):
+        return tf.reduce_mean(tf.reduce_sum(tf.keras.losses.binary_crossentropy(gt, pred), axis=(1, 2, 3, 4)))
+
+    @staticmethod
+    def _cal_transformation_loss(gt, pred):
+        return tf.reduce_mean(tf.reduce_sum(tf.nn.l2_loss(gt-pred), axis=(1, 2, 3)))
+
+    @staticmethod
+    def _cal_cycle_loss(gt, pred):
+        return tf.reduce_mean(tf.reduce_sum(tf.keras.losses.binary_crossentropy(gt, pred), axis=(1, 2, 3)))
+
+    @staticmethod
+    def _generate_mixed_order(num_parts, batch_size):
+        mixed_order_list = list()
+        for i in range(num_parts):
+            mixed_order_list.append(tf.convert_to_tensor(np.random.choice(batch_size, batch_size, False)))
+        return tf.convert_to_tensor(mixed_order_list)
+
+    @staticmethod
+    def _generate_de_mixed_order(mixed_order):
+        return tf.argsort(mixed_order, axis=1)
+
+    @staticmethod
+    def _mix(inputs, mixed_order, mode):
+        mixed_list = list()
+        if mode == 'label':
+            inputs = tf.transpose(inputs, [1, 0, 2, 3, 4, 5])
+            for each_input, each_order in zip(inputs, mixed_order):
+                mixed_list.append(tf.gather(each_input, each_order, axis=0))
+            mixed_output = tf.stack(mixed_list, axis=1)
+        elif mode == 'encoding':
+            for each_input, each_order in zip(inputs, mixed_order):
+                mixed_list.append(tf.gather(each_input, each_order, axis=0))
+            mixed_output = tf.convert_to_tensor(mixed_list)
+        elif mode == 'transformation':
+            inputs = tf.transpose(inputs, [1, 0, 2, 3])
+            for each_input, each_order in zip(inputs, mixed_order):
+                mixed_list.append(tf.gather(each_input, each_order, axis=0))
+            mixed_output = tf.stack(mixed_list, axis=1)
+        else:
+            raise ValueError('\'mode\' should be \'label\', \'encoding\' or \'transformation\'.')
+        return mixed_output
 
     def train_step(self, data):
-        pass
+
+        # x has shape (B, H, W, D, C), label has shape (B, num_parts, H, W, D, C), trans has shape (B, num_parts, 3, 4)
+        x, label, trans = data
+
+        if self.training_process == 1:  # training process for pretraining BinaryShapeEncoder, Projection, PartDecoder
+            with tf.GradientTape() as tape:
+                # decomposer output has shape (num_parts, B, encoding_dims)
+                decomposer_output = self.decomposer(x, training=True)
+                # composer output has shape (B, H, W, D, C)
+                composer_output = self.composer(decomposer_output, training=True)
+                pi_loss = self._cal_pi_loss()
+                part_recon_loss = self._cal_part_reconstruction_loss(label, self.composer.stacked_decoded_parts)
+                total_loss = pi_loss + part_recon_loss
+
+            decomposer_grads, decoder_grads = tape.gradient(total_loss, [self.decomposer.trainable_weights,
+                                                                         self.composer.part_decoder.trainable_weights])
+            self.optimizer.apply_gradients(zip(decomposer_grads, self.decomposer.trainable_weights))
+            self.optimizer.apply_gradients(zip(decoder_grads, self.composer.part_decoder.trainable_weights))
+
+            self.pi_loss_tracker.update_state(pi_loss)
+            self.part_reconstruction_loss_tracker.update_state(part_recon_loss)
+            self.total_loss_tracker.update_state(total_loss)
+
+            return {'PI_Loss': self.pi_loss_tracker.result(),
+                    'Part_Recon_Loss': self.part_reconstruction_loss_tracker.result(),
+                    'Total_Loss': self.total_loss_tracker.result()}
+
+        elif self.training_process == 2:  # training process for pretraining STN
+            with tf.GradientTape() as tape:
+                # decomposer output has shape (num_parts, B, encoding_dims)
+                decomposer_output = self.decomposer(x, training=True)
+                num_parts, B, _ = decomposer_output.shape
+                # composer output has shape (B, H, W, D, C)
+                composer_output = self.composer(decomposer_output, training=True)
+                trans_loss = self._cal_transformation_loss(trans,
+                                                           tf.reshape(self.composer.stn.theta, (B, num_parts, 3, 4)))
+
+            grads = tape.gradient(trans_loss, self.composer.stn.localizationnet.trainable_weights)
+            self.optimizer.apply_gradients(zip(grads, self.composer.stn.localizationnet.trainable_weights))
+
+            self.transformation_loss_tracker.update_state(trans_loss)
+
+            return {'Transformation_Loss': self.transformation_loss_tracker.result()}
+
+        elif self.training_process == 3:  # training process for fine tune all parameters using cycle loss
+            with tf.GradientTape() as tape:
+                # below is the first application:
+                # decomposer output has shape (num_parts, B, encoding_dims)
+                decomposer_output1 = self.decomposer(x, training=True)
+                num_parts, B, _ = decomposer_output1.shape
+                # mixed order has shape (num_parts, B)
+                mixed_order = self._generate_mixed_order(num_parts, B)
+                # mixed decomposer output has shape (num_parts, B, encoding_dims)
+                mixed_decomposer_output = self._mix(decomposer_output1, mixed_order, mode='encoding')
+                # mixed label has shape (B, num_parts, H, W, D, C)
+                mixed_label = self._mix(label, mixed_order, mode='label')
+                # mixed trans has shape (B, num_parts, 3, 4)
+                mixed_trans = self._mix(trans, mixed_order, mode='transformation')
+                # composer output has shape (B, H, W, D, C)
+                composer_output1 = self.composer(mixed_decomposer_output, training=True)
+                # calculate PI loss
+                pi_loss1 = self._cal_pi_loss()
+                # calculate part reconstruction loss
+                part_recon_loss1 = self._cal_part_reconstruction_loss(mixed_label, self.composer.stacked_decoded_parts)
+                # calculate transformation loss
+                trans_loss1 = self._cal_transformation_loss(mixed_trans,
+                                                            tf.reshape(self.composer.stn.theta, (B, num_parts, 3, 4)))
+
+                # below is the second application:
+                decomposer_output2 = self.decomposer(composer_output1, training=True)
+                de_mixed_order = self._generate_de_mixed_order(mixed_order)
+                de_mixed_decomposer_output = self._mix(decomposer_output2, de_mixed_order, mode='encoding')
+                de_mixed_label = label
+                de_mixed_trans = trans
+                composer_output2 = self.composer(de_mixed_decomposer_output, training=True)
+                pi_loss2 = self._cal_pi_loss()
+                part_recon_loss2 = self._cal_part_reconstruction_loss(de_mixed_label,
+                                                                      self.composer.stacked_decoded_parts)
+                trans_loss2 = self._cal_transformation_loss(de_mixed_trans,
+                                                            tf.reshape(self.composer.stn.theta, (B, num_parts, 3, 4)))
+
+                pi_loss = pi_loss1 + pi_loss2
+                part_recon_loss = part_recon_loss1 + part_recon_loss2
+                trans_loss = trans_loss1 + trans_loss2
+                cycle_loss = self._cal_cycle_loss(x, composer_output2)
+                total_loss = 0.1 * pi_loss + 100 * part_recon_loss + 0.1 * trans_loss + 0.1 * cycle_loss
+
+            grads = tape.gradient(total_loss, self.trainable_weights)
+            self.optimizer.apply_gradients(zip(grads, self.trainable_weights))
+
+            self.pi_loss_tracker.update_state(pi_loss)
+            self.part_reconstruction_loss_tracker.update_state(part_recon_loss)
+            self.transformation_loss_tracker.update_state(trans_loss)
+            self.cycle_loss_tracker.update_state(cycle_loss)
+            self.total_loss_tracker.update_state(total_loss)
+
+            return {'PI_Loss': self.pi_loss_tracker.result(),
+                    'Part_Recon_Loss': self.part_reconstruction_loss_tracker.result(),
+                    'Transformation_Loss': self.transformation_loss_tracker.result(),
+                    'Cycle_Loss': self.cycle_loss_tracker.result(),
+                    'Total_Loss': self.total_loss_tracker.result()}
+
+        else:
+            raise ValueError('Please choose training process. Valid value of training_process should be 1, 2 or 3.')
 
     @property
     def metrics(self):
-        pass
+        return [self.pi_loss_tracker, self.part_reconstruction_loss_tracker, self.transformation_loss_tracker,
+                self.cycle_loss_tracker, self.total_loss_tracker]
