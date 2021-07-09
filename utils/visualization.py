@@ -1,29 +1,74 @@
 from matplotlib import pyplot as plt
+from matplotlib import cm
+from matplotlib.colors import ListedColormap
 import numpy as np
 
 
-def visualize_label(label, show_axis=False, show_grid=False):
+def visualize(x,
+              label_or_voxel='label',
+              max_num_parts=4,
+              show_fig=True,
+              show_axis=False,
+              show_grid=False,
+              cmap='Set2',
+              save_fig=False,
+              save_dir=None):
+    """
+    :param x: input data to be visualized.
+    :param label_or_voxel: type of the input data, which means the input data is voxel grid label or voxel grid.
+    :param max_num_parts: maximal number of parts of the category. e.g. the maximal number of parts where the
+           category chair can be divided is 4.
+    :param show_fig: show the figure or not.
+    :param show_axis: show the axis of the figure or not.
+    :param show_grid: show the grid of the figure or not.
+    :param cmap: name of the cmap.
+    :param save_fig: save the figure or not.
+    :param save_dir: directory where the image is to be saved.
+    """
 
-    color_bar = ['white', 'red', 'green', 'blue', 'yellow']
-    color = np.empty(label.shape, dtype=str)
-    num_parts = np.max(label)
-    for part in range(1, num_parts + 1):
-        color[label == part] = color_bar[part]
+    if show_fig:
+        fig1 = plt.figure()
+        ax1 = fig1.add_subplot(projection='3d')
 
-    ax = plt.figure().add_subplot(projection='3d')
-    ax.voxels(label > 0, edgecolor='k', facecolors=color)
-    if not show_axis:
-        plt.axis('off')
-    if not show_grid:
-        plt.grid('off')
-    plt.show()
+        if label_or_voxel == 'label':
+            new_cmap = _get_cmap(max_num_parts, cmap)
+            label_color = np.take(new_cmap, x, axis=0)
+            ax1.voxels(x, facecolors=label_color)
+        elif label_or_voxel == 'voxel':
+            ax1.voxels(x)
+        else:
+            raise ValueError('\'label_or_voxel\' should be either\'label\' or \'voxel\'.')
+        if not show_axis:
+            plt.axis('off')
+        if not show_grid:
+            plt.grid('off')
+        plt.show()
+        plt.close(fig1)
+
+    if save_fig:
+        x = np.transpose(x, (0, 2, 1))
+        fig2 = plt.figure()
+        ax2 = fig2.add_subplot(projection='3d')
+        if label_or_voxel == 'label':
+            new_cmap = _get_cmap(max_num_parts, cmap)
+            label_color = np.take(new_cmap, x, axis=0)
+            ax2.voxels(x, facecolors=label_color)
+        elif label_or_voxel == 'voxel':
+            ax2.voxels(x)
+        else:
+            raise ValueError('\'label_or_voxel\' should be either\'label\' or \'voxel\'.')
+        if not show_axis:
+            plt.axis('off')
+        if not show_grid:
+            plt.grid('off')
+        plt.savefig(save_dir)
+        plt.close(fig2)
 
 
-def visualize_voxel_grid(voxel_grid, show_axis=False, show_grid=False):
-    ax = plt.figure().add_subplot(projection='3d')
-    ax.voxels(voxel_grid, edgecolor='k')
-    if not show_axis:
-        plt.axis('off')
-    if not show_grid:
-        plt.grid('off')
-    plt.show()
+def _get_cmap(num_points, cmap):
+    selected_cmap = cm.get_cmap(cmap, num_points)
+    if not isinstance(selected_cmap, ListedColormap):
+        raise ValueError(f'cmap should be <class \'matplotlib.colors.ListedColormap\'>, but got {type(selected_cmap)}')
+    new_cmap = np.ones((num_points + 1, 4))
+    new_cmap[1:] = selected_cmap.colors
+    return new_cmap
