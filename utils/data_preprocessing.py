@@ -1,4 +1,5 @@
 import numpy as np
+import os
 
 
 def get_reference_label(pcd_fp, label_fp, resolution=32):
@@ -72,3 +73,23 @@ def get_voxel_grid_label(voxel_grid, surface_label, k=3):
             surface_label[cord[0], cord[1], cord[2]] = voxel_label
             surface_label_cord = np.stack(np.where(surface_label > 0), axis=1)
     return surface_label
+
+
+def check_file_path(pcd_fp, binvox_fp):
+
+    # check pcd has corresponding label and img
+    pcd_dir = os.path.join(pcd_fp, 'points')
+    pcd_label_dir = os.path.join(pcd_fp, 'points_label')
+    pcd_img_dir = os.path.join(pcd_fp, 'seg_img')
+    pcd_names = [os.path.splitext(path)[0] for path in os.listdir(pcd_dir)]
+    pcd_names.sort()
+    label_names = [os.path.splitext(path)[0] for path in os.listdir(pcd_label_dir)]
+    label_names.sort()
+    img_names = [os.path.splitext(path)[0] for path in os.listdir(pcd_img_dir)]
+    img_names.sort()
+    assert pcd_names == label_names == img_names
+
+    # check every pcd has its corresponding binvox
+    binvox_names = os.listdir(binvox_fp)
+    for pcd_name in pcd_names:
+        assert pcd_name in binvox_names
