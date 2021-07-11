@@ -30,10 +30,22 @@ class TestDataPreprocessing(TestCase):
         return sur_label_chair1, sur_label_chair2
 
     def test_get_voxel_grid_label(self, visualize=True):
-        k = 5
         res = self.test_get_surface_label(visualize=False)
-        vox_grid_label_chair1 = get_voxel_grid_label(self.voxel_grid_chair1, res[0], k)
-        vox_grid_label_chair2 = get_voxel_grid_label(self.voxel_grid_chair2, res[1], k)
+        vox_grid_label_chair1 = get_voxel_grid_label(self.voxel_grid_chair1, res[0])
+        vox_grid_label_chair2 = get_voxel_grid_label(self.voxel_grid_chair2, res[1])
         if visualize:
             visualization.visualize(vox_grid_label_chair1)
             visualization.visualize(vox_grid_label_chair2)
+        return vox_grid_label_chair1, vox_grid_label_chair2
+
+    def test_get_seperated_part_label(self, visualize=True):
+        res = self.test_get_voxel_grid_label(visualize=False)
+        part_voxel_grid_array_chair1, transformation_matrix_array_chair1 = get_seperated_part_label(res[0])
+        part_voxel_grid_array_chair2, transformation_matrix_array_chair2 = get_seperated_part_label(res[1])
+        if visualize:
+            for part, transformation in zip(part_voxel_grid_array_chair1, transformation_matrix_array_chair1):
+                visualization.visualize(part, 'voxel', show_axis=True, show_grid=True)
+                print(transformation)
+            for part, transformation in zip(part_voxel_grid_array_chair2, transformation_matrix_array_chair2):
+                visualization.visualize(part, 'voxel', show_grid=True, show_axis=True)
+                print(transformation)

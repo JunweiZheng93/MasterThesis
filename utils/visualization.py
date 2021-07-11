@@ -6,7 +6,7 @@ import numpy as np
 
 def visualize(x,
               label_or_voxel='label',
-              max_num_parts=4,
+              max_num_parts=8,
               show_fig=True,
               show_axis=False,
               show_grid=False,

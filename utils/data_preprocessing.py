@@ -1,5 +1,6 @@
 import numpy as np
 import os
+from scipy import ndimage
 
 
 def get_reference_label(pcd_fp, label_fp, resolution=32):
@@ -52,7 +53,7 @@ def get_surface_label(voxel_grid, reference_label):
     return surface_label
 
 
-def get_voxel_grid_label(voxel_grid, surface_label, k=3):
+def get_voxel_grid_label(voxel_grid, surface_label, k=5):
     """
     :param voxel_grid: voxel grid generated from binvox file
     :param surface_label: surface label for the voxel grid generated from binvox file
@@ -73,6 +74,53 @@ def get_voxel_grid_label(voxel_grid, surface_label, k=3):
             surface_label[cord[0], cord[1], cord[2]] = voxel_label
             surface_label_cord = np.stack(np.where(surface_label > 0), axis=1)
     return surface_label
+
+
+def get_seperated_part_label(voxel_grid_label):
+    """
+    :param voxel_grid_label: voxel grid label to be seperated
+    :return: part_voxel_grid_array in shape (num_parts, H, W, D), transformation_matrix_array in shape (num_parts, 4, 4)
+    """
+    num_parts = np.max(voxel_grid_label)
+    resolution = voxel_grid_label.shape[0]
+    voxel_grid_center = np.full((3,), (resolution - 1) // 2)
+    part_voxel_grid_list = list()
+    transformation_matrix_list = list()
+
+    for i in range(1, num_parts+1):
+        original_part_voxel_grid = voxel_grid_label == i
+        if not original_part_voxel_grid.any():
+            continue
+        part_cord = np.stack(np.where(original_part_voxel_grid), axis=1)
+
+        # get scaled and centered part voxel grid
+        part_min_cord = np.min(part_cord, axis=0)
+        part_max_cord = np.max(part_cord, axis=0)
+        part_bbox_hwd = part_max_cord - part_min_cord + 1
+        scale_factor = resolution // np.max(part_bbox_hwd)
+        part_bbox = np.full((part_bbox_hwd[0], part_bbox_hwd[1], part_bbox_hwd[2]), False)
+        for each_cord in (part_cord - part_min_cord):
+            part_bbox[each_cord[0], each_cord[1], each_cord[2]] = True
+        scaled_part_bbox = ndimage.zoom(part_bbox, scale_factor, order=0)
+        scaled_part_bbox_center = (np.asarray(scaled_part_bbox.shape) - 1) // 2
+        dist = voxel_grid_center - scaled_part_bbox_center
+        scaled_centered_part_bbox_cord = np.stack(np.where(scaled_part_bbox), axis=1) + dist
+        part_voxel_grid = np.full((resolution, resolution, resolution), False)
+        for each_cord in scaled_centered_part_bbox_cord:
+            part_voxel_grid[each_cord[0], each_cord[1], each_cord[2]] = True
+        part_voxel_grid_list.append(part_voxel_grid)
+
+        # get transformation matrix information
+        translation = np.min(scaled_centered_part_bbox_cord, axis=0) - part_min_cord * scale_factor
+        transformation_matrix = np.full((4, 4), 0)
+        transformation_matrix[0, 0] = transformation_matrix[1, 1] = transformation_matrix[2, 2] = scale_factor
+        transformation_matrix[0, 3] = translation[0]
+        transformation_matrix[1, 3] = translation[1]
+        transformation_matrix[2, 3] = translation[2]
+        transformation_matrix[3, 3] = 1
+        transformation_matrix_list.append(transformation_matrix)
+
+    return np.asarray(part_voxel_grid_list), np.asarray(transformation_matrix_list)
 
 
 def check_file_path(pcd_fp, binvox_fp):
