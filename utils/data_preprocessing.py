@@ -149,6 +149,13 @@ def check_file_path(pcd_fp, binvox_fp):
 
 
 def process_data(pcd_fp, binvox_fp, output_fp, resolution=32, k=5):
+    """
+    :param pcd_fp: path of point cloud data. for example, './shapenetcore_partanno_segmentation_benchmark_v0/03001627/'
+    :param binvox_fp: path of binvox files. for example, './ShapeNetVox32/03001627/'
+    :param output_fp: path to save the processed data. for example, './dataset/'
+    :param resolution: resolution to voxelize the point cloud data. should be the same as the resolution of binvox file
+    :param k: knn parameter for the voxelization
+    """
 
     # check all stuff
     check_file_path(pcd_fp, binvox_fp)
@@ -199,11 +206,11 @@ if __name__ == '__main__':
     parser.add_argument('pcd_fp', help='path of point cloud data. '
                                        'For example, \'./shapenetcore_partanno_segmentation_benchmark_v0/03001627/\'')
     parser.add_argument('binvox_fp', help='path of binvox files. For example, \'./ShapeNetVox32/03001627/\'')
-    parser.add_argument('output_fp', help='path to save the processed data. For example. \'./dataset/\'')
+    parser.add_argument('output_fp', help='path to save the processed data. For example, \'./dataset/\'')
 
     # optional arguments
     parser.add_argument('-r', '--resolution', default=32, help='resolution to voxelize the point cloud data. should be '
-                                                               'the same of the resolution of binvox file. default 32')
+                                                               'the same as the resolution of binvox file. default 32')
     parser.add_argument('-k', default=5, help='knn parameter for the voxelization. default 5')
 
     args = parser.parse_args()
