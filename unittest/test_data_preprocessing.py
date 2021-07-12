@@ -7,14 +7,14 @@ from unittest import TestCase
 class TestDataPreprocessing(TestCase):
 
     def setUp(self) -> None:
-        with open('dataset/chair/chair1.binvox', 'rb') as f:
+        with open('datasets/chair/chair1.binvox', 'rb') as f:
             self.voxel_grid_chair1 = binvox_rw.read_as_3d_array(f).data
-        with open('dataset/chair/chair2.binvox', 'rb') as f:
+        with open('datasets/chair/chair2.binvox', 'rb') as f:
             self.voxel_grid_chair2 = binvox_rw.read_as_3d_array(f).data
 
     def test_get_reference_label(self, visualize=True):
-        ref_label_chair1 = get_reference_label('dataset/chair/chair1.pts', 'dataset/chair/chair1.seg')
-        ref_label_chair2 = get_reference_label('dataset/chair/chair2.pts', 'dataset/chair/chair2.seg')
+        ref_label_chair1 = get_reference_label('datasets/chair/chair1.pts', 'datasets/chair/chair1.seg')
+        ref_label_chair2 = get_reference_label('datasets/chair/chair2.pts', 'datasets/chair/chair2.seg')
         if visualize:
             visualization.visualize(ref_label_chair1)
             visualization.visualize(ref_label_chair2)
