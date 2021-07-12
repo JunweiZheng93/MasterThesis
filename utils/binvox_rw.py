@@ -145,7 +145,6 @@ def read_as_3d_array(fp, fix_coords=True):
     data = np.repeat(values, counts).astype(np.bool)
     data = data.reshape(dims)
     if fix_coords:
-        # xzy to xyz TODO the right thing
         data = np.transpose(data, (0, 2, 1))
         axis_order = 'xyz'
     else:
@@ -183,7 +182,6 @@ def read_as_coord_array(fp, fix_coords=True):
     for index, end_index in zip(indices, end_indices):
         nz_voxels.extend(range(index, end_index))
     nz_voxels = np.array(nz_voxels)
-    # TODO are these dims correct?
     # according to docs,
     # index = x * wxh + z * width + y; // wxh = width * height = d * d
 
@@ -228,7 +226,6 @@ def sparse_to_dense(voxel_data, dims, dtype=np.bool):
 
 #def get_linear_index(x, y, z, dims):
     #""" Assuming xzy order. (y increasing fastest.
-    #TODO ensure this is right when dims are not all same
     #"""
     #return x*(dims[1]*dims[2]) + z*dims[1] + y
     
@@ -252,7 +249,6 @@ def write(voxel_model, fp):
 
     """
     if voxel_model.data.ndim==2:
-        # TODO avoid conversion to dense
         dense_voxel_data = sparse_to_dense(voxel_model.data, voxel_model.dims)
     else:
         dense_voxel_data = voxel_model.data

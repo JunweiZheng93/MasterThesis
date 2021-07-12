@@ -176,8 +176,7 @@ def process_data(pcd_fp, binvox_fp, output_fp, resolution=32, k=5):
         with open(binvox_path, 'rb') as f:
             voxel_grid = binvox_rw.read_as_3d_array(f).data
         scipy.io.savemat(os.path.join(shape_dir, 'object_unlabeled.mat'), {'data': voxel_grid})
-        visualization.visualize(voxel_grid, show_fig=False, save_fig=True,
-                                save_dir=os.path.join(shape_dir, 'object_unlabeled.png'))
+        visualization.save_visualized_img(voxel_grid, save_dir=os.path.join(shape_dir, 'object_unlabeled.png'))
 
         ref_label = get_reference_label(os.path.join(pcd_fp, 'points', f'{shape_name}.pts'),
                                         os.path.join(pcd_fp, 'points_label', f'{shape_name}.seg'),
@@ -185,16 +184,14 @@ def process_data(pcd_fp, binvox_fp, output_fp, resolution=32, k=5):
         sur_label = get_surface_label(voxel_grid, ref_label)
         voxel_grid_label = get_voxel_grid_label(voxel_grid, sur_label, k)
         scipy.io.savemat(os.path.join(shape_dir, 'object_labeled.mat'), {'data': voxel_grid_label})
-        visualization.visualize(voxel_grid_label, show_fig=False, save_fig=True,
-                                save_dir=os.path.join(shape_dir, 'object_labeled.png'))
+        visualization.save_visualized_img(voxel_grid_label, save_dir=os.path.join(shape_dir, 'object_labeled.png'))
 
         part_voxel_grid, transformation = get_seperated_part_and_transformation(voxel_grid_label)
         count = 1
         for part, trans in zip(part_voxel_grid, transformation):
             scipy.io.savemat(os.path.join(shape_dir, f'part{count}.mat'), {'data': part})
             scipy.io.savemat(os.path.join(shape_dir, f'part{count}_trans_matrix.mat'), {'data': trans})
-            visualization.visualize(part, show_fig=False, save_fig=True,
-                                    save_dir=os.path.join(shape_dir, f'part{count}.png'))
+            visualization.save_visualized_img(part, save_dir=os.path.join(shape_dir, f'part{count}.png'))
             count += 1
 
 
