@@ -5,7 +5,6 @@ import numpy as np
 
 
 def visualize(x,
-              label_or_voxel='label',
               max_num_parts=8,
               show_fig=True,
               show_axis=False,
@@ -15,7 +14,6 @@ def visualize(x,
               save_dir=None):
     """
     :param x: input data to be visualized.
-    :param label_or_voxel: type of the input data, which means the input data is voxel grid label or voxel grid.
     :param max_num_parts: maximal number of parts of the category. e.g. the maximal number of parts where the
            category chair can be divided is 4.
     :param show_fig: show the figure or not.
@@ -29,15 +27,9 @@ def visualize(x,
     if show_fig:
         fig1 = plt.figure()
         ax1 = fig1.add_subplot(projection='3d')
-
-        if label_or_voxel == 'label':
-            new_cmap = _get_cmap(max_num_parts, cmap)
-            label_color = np.take(new_cmap, x, axis=0)
-            ax1.voxels(x, facecolors=label_color)
-        elif label_or_voxel == 'voxel':
-            ax1.voxels(x)
-        else:
-            raise ValueError('\'label_or_voxel\' should be either\'label\' or \'voxel\'.')
+        new_cmap = get_cmap(max_num_parts, cmap)
+        label_color = np.take(new_cmap, x, axis=0)
+        ax1.voxels(x, facecolors=label_color)
         if not show_axis:
             plt.axis('off')
         if not show_grid:
@@ -49,14 +41,9 @@ def visualize(x,
         x = np.transpose(x, (0, 2, 1))
         fig2 = plt.figure()
         ax2 = fig2.add_subplot(projection='3d')
-        if label_or_voxel == 'label':
-            new_cmap = _get_cmap(max_num_parts, cmap)
-            label_color = np.take(new_cmap, x, axis=0)
-            ax2.voxels(x, facecolors=label_color)
-        elif label_or_voxel == 'voxel':
-            ax2.voxels(x)
-        else:
-            raise ValueError('\'label_or_voxel\' should be either\'label\' or \'voxel\'.')
+        new_cmap = get_cmap(max_num_parts, cmap)
+        label_color = np.take(new_cmap, x, axis=0)
+        ax2.voxels(x, facecolors=label_color)
         if not show_axis:
             plt.axis('off')
         if not show_grid:
@@ -65,7 +52,7 @@ def visualize(x,
         plt.close(fig2)
 
 
-def _get_cmap(num_points, cmap):
+def get_cmap(num_points, cmap):
     selected_cmap = cm.get_cmap(cmap, num_points)
     if not isinstance(selected_cmap, ListedColormap):
         raise ValueError(f'cmap should be <class \'matplotlib.colors.ListedColormap\'>, but got {type(selected_cmap)}')

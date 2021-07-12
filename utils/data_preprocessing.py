@@ -1,6 +1,11 @@
 import numpy as np
 import os
+import scipy.io
+import argparse
+from utils import binvox_rw
+from utils import visualization
 from scipy import ndimage
+from tqdm import tqdm
 
 
 def get_reference_label(pcd_fp, label_fp, resolution=32):
@@ -76,7 +81,7 @@ def get_voxel_grid_label(voxel_grid, surface_label, k=5):
     return surface_label
 
 
-def get_seperated_part_label(voxel_grid_label):
+def get_seperated_part_and_transformation(voxel_grid_label):
     """
     :param voxel_grid_label: voxel grid label to be seperated
     :return: part_voxel_grid_array in shape (num_parts, H, W, D), transformation_matrix_array in shape (num_parts, 4, 4)
@@ -141,3 +146,66 @@ def check_file_path(pcd_fp, binvox_fp):
     binvox_names = os.listdir(binvox_fp)
     for pcd_name in pcd_names:
         assert pcd_name in binvox_names
+
+
+def process_data(pcd_fp, binvox_fp, output_fp, resolution=32, k=5):
+
+    # check all stuff
+    check_file_path(pcd_fp, binvox_fp)
+    if not pcd_fp.endswith('/'):
+        pcd_fp += '/'
+    category_name = pcd_fp.split('/')[-2]
+    output_fp = os.path.join(output_fp, category_name)
+    if not os.path.exists(output_fp):
+        os.makedirs(output_fp)
+
+    shape_names = [os.path.splitext(each)[0] for each in os.listdir(os.path.join(pcd_fp, 'points'))]
+    for shape_name in tqdm(shape_names):
+        shape_dir = os.path.join(output_fp, shape_name)
+        if not os.path.exists(shape_dir):
+            os.mkdir(shape_dir)
+
+        binvox_path = os.path.join(binvox_fp, shape_name, 'model.binvox')
+        with open(binvox_path, 'rb') as f:
+            voxel_grid = binvox_rw.read_as_3d_array(f).data
+        scipy.io.savemat(os.path.join(shape_dir, 'object_unlabeled.mat'), {'data': voxel_grid})
+        visualization.visualize(voxel_grid, show_fig=False, save_fig=True,
+                                save_dir=os.path.join(shape_dir, 'object_unlabeled.png'))
+
+        ref_label = get_reference_label(os.path.join(pcd_fp, 'points', f'{shape_name}.pts'),
+                                        os.path.join(pcd_fp, 'points_label', f'{shape_name}.seg'),
+                                        resolution)
+        sur_label = get_surface_label(voxel_grid, ref_label)
+        voxel_grid_label = get_voxel_grid_label(voxel_grid, sur_label, k)
+        scipy.io.savemat(os.path.join(shape_dir, 'object_labeled.mat'), {'data': voxel_grid_label})
+        visualization.visualize(voxel_grid_label, show_fig=False, save_fig=True,
+                                save_dir=os.path.join(shape_dir, 'object_labeled.png'))
+
+        part_voxel_grid, transformation = get_seperated_part_and_transformation(voxel_grid_label)
+        count = 1
+        for part, trans in zip(part_voxel_grid, transformation):
+            scipy.io.savemat(os.path.join(shape_dir, f'part{count}.mat'), {'data': part})
+            scipy.io.savemat(os.path.join(shape_dir, f'part{count}_trans_matrix.mat'), {'data': trans})
+            visualization.visualize(part, show_fig=False, save_fig=True,
+                                    save_dir=os.path.join(shape_dir, f'part{count}.png'))
+            count += 1
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description='This program is used to convert point cloud and its label to voxel '
+                                                 'grid and its label.')
+
+    # positional arguments
+    parser.add_argument('pcd_fp', help='path of point cloud data. '
+                                       'For example, \'./shapenetcore_partanno_segmentation_benchmark_v0/03001627/\'')
+    parser.add_argument('binvox_fp', help='path of binvox files. For example, \'./ShapeNetVox32/03001627/\'')
+    parser.add_argument('output_fp', help='path to save the processed data. For example. \'./dataset/\'')
+
+    # optional arguments
+    parser.add_argument('-r', '--resolution', default=32, help='resolution to voxelize the point cloud data. should be '
+                                                               'the same of the resolution of binvox file. default 32')
+    parser.add_argument('-k', default=5, help='knn parameter for the voxelization. default 5')
+
+    args = parser.parse_args()
+
+    process_data(args.pcd_fp, args.binvox_fp, args.output_fp, args.resolution, args.k)
