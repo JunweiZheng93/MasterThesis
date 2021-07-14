@@ -85,17 +85,20 @@ def get_seperated_part_and_transformation(voxel_grid_label):
     """
     :param voxel_grid_label: voxel grid label to be seperated
     :return: part_voxel_grid_array in shape (num_parts, H, W, D), transformation_matrix_array in shape (num_parts, 4, 4)
+            which_part in shape (num_parts,)
     """
     num_parts = np.max(voxel_grid_label)
     resolution = voxel_grid_label.shape[0]
     voxel_grid_center = np.full((3,), (resolution - 1) // 2)
     part_voxel_grid_list = list()
     transformation_matrix_list = list()
+    which_part = list()
 
     for i in range(1, num_parts+1):
         original_part_voxel_grid = voxel_grid_label == i
         if not original_part_voxel_grid.any():
             continue
+        which_part.append(i)
         part_cord = np.stack(np.where(original_part_voxel_grid), axis=1)
 
         # get scaled and centered part voxel grid
@@ -125,7 +128,7 @@ def get_seperated_part_and_transformation(voxel_grid_label):
         transformation_matrix[3, 3] = 1
         transformation_matrix_list.append(transformation_matrix)
 
-    return np.asarray(part_voxel_grid_list), np.asarray(transformation_matrix_list)
+    return np.asarray(part_voxel_grid_list), np.asarray(transformation_matrix_list), np.asarray(which_part)
 
 
 def check_file_path(pcd_fp, binvox_fp):
@@ -186,13 +189,11 @@ def process_data(pcd_fp, binvox_fp, output_fp, resolution=32, k=5):
         scipy.io.savemat(os.path.join(shape_dir, 'object_labeled.mat'), {'data': voxel_grid_label})
         visualization.save_visualized_img(voxel_grid_label, save_dir=os.path.join(shape_dir, 'object_labeled.png'))
 
-        part_voxel_grid, transformation = get_seperated_part_and_transformation(voxel_grid_label)
-        count = 1
-        for part, trans in zip(part_voxel_grid, transformation):
-            scipy.io.savemat(os.path.join(shape_dir, f'part{count}.mat'), {'data': part})
-            scipy.io.savemat(os.path.join(shape_dir, f'part{count}_trans_matrix.mat'), {'data': trans})
-            visualization.save_visualized_img(part, save_dir=os.path.join(shape_dir, f'part{count}.png'))
-            count += 1
+        part_voxel_grid, transformation, which_part = get_seperated_part_and_transformation(voxel_grid_label)
+        for part, trans, which in zip(part_voxel_grid, transformation, which_part):
+            scipy.io.savemat(os.path.join(shape_dir, f'part{which}.mat'), {'data': part})
+            scipy.io.savemat(os.path.join(shape_dir, f'part{which}_trans_matrix.mat'), {'data': trans})
+            visualization.save_visualized_img(part, save_dir=os.path.join(shape_dir, f'part{which}.png'))
 
 
 if __name__ == '__main__':
