@@ -6,7 +6,7 @@ import scipy.io
 from tensorflow.keras.utils import Sequence
 
 CATEGORY_MAP = {'chair': '03001627', 'table': '04379243', 'airplane': '02691156', 'lamp': '03636649'}
-URL_MAP = {'chair': '',
+URL_MAP = {'chair': 'https://gitlab.com/JunweiZheng93/shapenetsegvox/-/raw/master/03001627.zip?inline=false',
            'table': '',
            'airplane': '',
            'lamp': ''}
@@ -85,27 +85,20 @@ class Dataset(Sequence):
             voxel_grid = scipy.io.loadmat(voxel_grid_fp)['data'][:, :, :, np.newaxis]
             batch_voxel_grid.append(voxel_grid)
 
-            part_fp = sorted(part_fp)
-            trans_fp = sorted(trans_fp)
             parts = list()
             transformations = list()
-            count = 0
-            for each_part, each_trans in zip(part_fp, trans_fp):
-                count += 1
-                if each_part[-5] == str(count):
-                    part = scipy.io.loadmat(each_part)['data'][:, :, :, np.newaxis]
-                    parts.append(part)
-                    transformations.append(scipy.io.loadmat(each_trans)['data'][:3])
-                else:
+            member_list = [int(each[-5]) for each in part_fp]
+            dir_name = os.path.dirname(voxel_grid_fp)
+            for i in range(1, self.max_num_parts+1):
+                if i not in member_list:
                     part = np.zeros_like(voxel_grid, dtype='int32')
                     parts.append(part)
                     transformation = np.zeros((3, 4), dtype='int32')
                     transformations.append(transformation)
-            if count != self.max_num_parts:
-                part = np.zeros_like(voxel_grid, dtype='int32')
-                parts.append(part)
-                transformation = np.zeros((3, 4), dtype='int32')
-                transformations.append(transformation)
+                else:
+                    part = scipy.io.loadmat(os.path.join(dir_name, f'part{i}.mat'))['data'][:, :, :, np.newaxis]
+                    parts.append(part)
+                    transformations.append(scipy.io.loadmat(os.path.join(dir_name, f'part{i}_trans_matrix.mat'))['data'][:3])
             batch_part.append(parts)
             batch_trans.append(transformations)
 

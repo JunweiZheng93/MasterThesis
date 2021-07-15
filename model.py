@@ -374,8 +374,7 @@ class Resampling(keras.layers.Layer):
                                   c101[:, :, :, :, :, channel] * xd * (1 - yd) * zd + c011[:, :, :, :, :, channel] * (1 - xd) * yd * zd + \
                                   c110[:, :, :, :, :, channel] * xd * yd * (1 - zd) + c111[:, :, :, :, :, channel] * xd * yd * zd
             output_fmap.append(output_fmap_channel)
-        # output feature map now has shape (B, num_parts, H, W, D, C)
-        return tf.convert_to_tensor(output_fmap)
+        return tf.stack(output_fmap, axis=5)
 
     @staticmethod
     def _get_voxel_value(input_fmap, x, y, z):
@@ -427,10 +426,34 @@ class Composer(keras.layers.Layer):
         localization_inputs = (self.stacked_decoded_parts, summed_inputs)
         # output_fmap has shape (B, num_parts, H, W, D, C)
         output_fmap = self.stn(localization_inputs, training=training)
+        output_fmap = tf.where(output_fmap >= 0.5, 1., 0.)
         # reconstructed model shape has the shape of (B, H, W, D, C)
         reconstructed_shape = tf.reduce_sum(output_fmap, axis=1)
-        reconstructed_shape = tf.where(reconstructed_shape >= 0.5, 1, 0)
-        return reconstructed_shape
+        reconstructed_shape = tf.where(reconstructed_shape >= 1., 1., 0.)
+
+        resolution = tf.shape(output_fmap)[2]
+        C = tf.shape(output_fmap)[5]
+        vote_dict = dict()
+        reconstructed_shape_label_list = list()
+        for each_shape in output_fmap:
+            for part_label, each_part in enumerate(each_shape):
+                part_label_coord = tf.where(each_part >= 1.)
+                for coord in part_label_coord:
+                    code = int(coord[0] + coord[1] * resolution + coord[2] * resolution ** 2, coord[3] * C * resolution ** 2)
+                    if code not in list(vote_dict.keys()):
+                        vote_dict[code] = [part_label]
+                    else:
+                        vote_dict[code].append(part_label)
+            reconstructed_part_label = tf.zeros((resolution, resolution, resolution, C),  dtype=tf.int32)
+            for code in list(vote_dict.keys()):
+                count_list = vote_dict[code]
+                voxel_label = max(set(count_list), key=count_list.count)
+                idx = [code % resolution, code // resolution % resolution, code // resolution // resolution % resolution,
+                       code // resolution // resolution // resolution % C]
+                reconstructed_part_label[idx[0], idx[1], idx[2], idx[3]] = voxel_label
+            reconstructed_shape_label_list.append(reconstructed_part_label)
+        reconstructed_shape_label = tf.convert_to_tensor(reconstructed_shape_label_list)
+        return reconstructed_shape, reconstructed_shape_label
 
 
 class Model(keras.Model):
@@ -477,7 +500,7 @@ class Model(keras.Model):
 
     @staticmethod
     def _cal_transformation_loss(gt, pred):
-        return tf.reduce_mean(tf.reduce_sum(tf.nn.l2_loss(gt-pred), axis=(1, 2, 3)))
+        return tf.nn.l2_loss(gt-pred) / tf.cast(tf.shape(gt)[0], dtype=tf.float32)
 
     @staticmethod
     def _cal_cycle_loss(gt, pred):
@@ -604,7 +627,7 @@ class Model(keras.Model):
                                                             tf.reshape(self.composer.stn.theta, (B, num_parts, 3, 4)))
 
                 # below is the second application:
-                _, composer_output, _ = self.call(composer_output, training=True, mode='de_mix', mixed_order=mixed_order)
+                _, composer_output, _ = self.call(composer_output[0], training=True, mode='de_mix', mixed_order=mixed_order)
                 de_mixed_label = label
                 de_mixed_trans = trans
                 pi_loss2 = self._cal_pi_loss()
@@ -616,7 +639,7 @@ class Model(keras.Model):
                 pi_loss = pi_loss1 + pi_loss2
                 part_recon_loss = part_recon_loss1 + part_recon_loss2
                 trans_loss = trans_loss1 + trans_loss2
-                cycle_loss = self._cal_cycle_loss(x, composer_output)
+                cycle_loss = self._cal_cycle_loss(x, composer_output[0])
                 total_loss = 0.1 * pi_loss + 100 * part_recon_loss + 0.1 * trans_loss + 0.1 * cycle_loss
 
             grads = tape.gradient(total_loss, self.trainable_weights)

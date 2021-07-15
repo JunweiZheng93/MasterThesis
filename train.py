@@ -8,6 +8,11 @@ import os
 
 PROJ_ROOT = os.path.abspath(__file__)[:-8]
 
+gpus = tf.config.experimental.list_physical_devices("GPU")
+if gpus:
+    for gpu in gpus:
+        tf.config.experimental.set_memory_growth(gpu, True)
+
 
 def train_model(category='chair',
                 batch_size=32,
@@ -99,7 +104,7 @@ if __name__ == '__main__':
                 max_num_parts=4,
                 optimizer='adam',
                 run_eagerly=True,
-                epochs=(2, 2, 2),
+                epochs=(1, 1, 1),
                 shuffle=True,
                 max_queue_size=32,
                 workers=4,
