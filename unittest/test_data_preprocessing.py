@@ -40,8 +40,8 @@ class TestDataPreprocessing(TestCase):
 
     def test_get_seperated_part_and_transformation(self, visualize=True):
         res = self.test_get_voxel_grid_label(visualize=False)
-        part_voxel_grid_chair1, transformation_matrix_chair1 = get_seperated_part_and_transformation(res[0])
-        part_voxel_grid_chair2, transformation_matrix_chair2 = get_seperated_part_and_transformation(res[1])
+        part_voxel_grid_chair1, transformation_matrix_chair1, _ = get_seperated_part_and_transformation(res[0])
+        part_voxel_grid_chair2, transformation_matrix_chair2, _ = get_seperated_part_and_transformation(res[1])
         if visualize:
             for part, transformation in zip(part_voxel_grid_chair1, transformation_matrix_chair1):
                 visualization.visualize(part, show_axis=True, show_grid=True)

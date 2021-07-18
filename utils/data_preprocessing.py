@@ -1,3 +1,5 @@
+import math
+
 import numpy as np
 import os
 import scipy.io
@@ -105,7 +107,7 @@ def get_seperated_part_and_transformation(voxel_grid_label):
         part_min_cord = np.min(part_cord, axis=0)
         part_max_cord = np.max(part_cord, axis=0)
         part_bbox_hwd = part_max_cord - part_min_cord + 1
-        scale_factor = resolution // np.max(part_bbox_hwd)
+        scale_factor = math.floor((resolution / np.max(part_bbox_hwd)) * 100) / 100
         part_bbox = np.full((part_bbox_hwd[0], part_bbox_hwd[1], part_bbox_hwd[2]), False)
         for each_cord in (part_cord - part_min_cord):
             part_bbox[each_cord[0], each_cord[1], each_cord[2]] = True
@@ -120,12 +122,12 @@ def get_seperated_part_and_transformation(voxel_grid_label):
 
         # get transformation matrix information
         translation = np.min(scaled_centered_part_bbox_cord, axis=0) - part_min_cord * scale_factor
-        transformation_matrix = np.full((4, 4), 0)
+        transformation_matrix = np.full((4, 4), 0.)
         transformation_matrix[0, 0] = transformation_matrix[1, 1] = transformation_matrix[2, 2] = scale_factor
         transformation_matrix[0, 3] = translation[0]
         transformation_matrix[1, 3] = translation[1]
         transformation_matrix[2, 3] = translation[2]
-        transformation_matrix[3, 3] = 1
+        transformation_matrix[3, 3] = 1.
         transformation_matrix_list.append(transformation_matrix)
 
     return np.asarray(part_voxel_grid_list), np.asarray(transformation_matrix_list), np.asarray(which_part)
