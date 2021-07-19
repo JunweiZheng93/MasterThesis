@@ -91,9 +91,9 @@ class Dataset(Sequence):
             dir_name = os.path.dirname(voxel_grid_fp)
             for i in range(1, self.max_num_parts+1):
                 if i not in member_list:
-                    part = np.zeros_like(voxel_grid, dtype='int32')
+                    part = np.zeros_like(voxel_grid, dtype='uint8')
                     parts.append(part)
-                    transformation = np.zeros((3, 4), dtype='int32')
+                    transformation = np.zeros((3, 4), dtype='float32')
                     transformations.append(transformation)
                 else:
                     part = scipy.io.loadmat(os.path.join(dir_name, f'part{i}.mat'))['data'][:, :, :, np.newaxis]

@@ -1,5 +1,4 @@
 import math
-
 import numpy as np
 import os
 import scipy.io
@@ -18,7 +17,7 @@ def get_reference_label(pcd_fp, label_fp, resolution=32):
     :return: voxel grid label generated from point cloud label
     """
     pcd = np.genfromtxt(pcd_fp, dtype='float32')
-    pcd_label = np.genfromtxt(label_fp, dtype='int32')
+    pcd_label = np.genfromtxt(label_fp, dtype='uint8')
     maxi = np.max(pcd, axis=0)
     mini = np.min(pcd, axis=0)
     voxel_size = np.max(np.ceil((maxi - mini) * 10000 / (resolution - 1)) / 10000)
@@ -34,7 +33,7 @@ def get_reference_label(pcd_fp, label_fp, resolution=32):
         else:
             voxel_grid_label_dict[voxel_idx].append(point_label)
 
-    voxel_grid_label = np.full((resolution, resolution, resolution), 0, dtype='int32')
+    voxel_grid_label = np.full((resolution, resolution, resolution), 0, dtype='uint8')
     for voxel_idx in list(voxel_grid_label_dict.keys()):
         count_list = voxel_grid_label_dict[voxel_idx]
         voxel_label = max(set(count_list), key=count_list.count)
@@ -51,7 +50,7 @@ def get_surface_label(voxel_grid, reference_label):
     """
     voxel_grid_cord = np.stack(np.where(voxel_grid), axis=1)
     ref_label_cord = np.stack(np.where(reference_label > 0), axis=1)
-    surface_label = np.zeros_like(voxel_grid, dtype='int32')
+    surface_label = np.zeros_like(voxel_grid, dtype='uint8')
     for cord in ref_label_cord:
         dist = cord - voxel_grid_cord
         mini_dist_idx = np.argmin(np.linalg.norm(dist, axis=1))
@@ -108,21 +107,21 @@ def get_seperated_part_and_transformation(voxel_grid_label):
         part_max_cord = np.max(part_cord, axis=0)
         part_bbox_hwd = part_max_cord - part_min_cord + 1
         scale_factor = math.floor((resolution / np.max(part_bbox_hwd)) * 100) / 100
-        part_bbox = np.full((part_bbox_hwd[0], part_bbox_hwd[1], part_bbox_hwd[2]), False)
+        part_bbox = np.full((part_bbox_hwd[0], part_bbox_hwd[1], part_bbox_hwd[2]), 0, dtype='uint8')
         for each_cord in (part_cord - part_min_cord):
-            part_bbox[each_cord[0], each_cord[1], each_cord[2]] = True
+            part_bbox[each_cord[0], each_cord[1], each_cord[2]] = 1
         scaled_part_bbox = ndimage.zoom(part_bbox, scale_factor, order=0)
         scaled_part_bbox_center = (np.asarray(scaled_part_bbox.shape) - 1) // 2
         dist = voxel_grid_center - scaled_part_bbox_center
         scaled_centered_part_bbox_cord = np.stack(np.where(scaled_part_bbox), axis=1) + dist
-        part_voxel_grid = np.full((resolution, resolution, resolution), False)
+        part_voxel_grid = np.full((resolution, resolution, resolution), 0, dtype='uint8')
         for each_cord in scaled_centered_part_bbox_cord:
-            part_voxel_grid[each_cord[0], each_cord[1], each_cord[2]] = True
+            part_voxel_grid[each_cord[0], each_cord[1], each_cord[2]] = 1
         part_voxel_grid_list.append(part_voxel_grid)
 
         # get transformation matrix information
         translation = np.min(scaled_centered_part_bbox_cord, axis=0) - part_min_cord * scale_factor
-        transformation_matrix = np.full((4, 4), 0.)
+        transformation_matrix = np.full((4, 4), 0, dtype='float32')
         transformation_matrix[0, 0] = transformation_matrix[1, 1] = transformation_matrix[2, 2] = scale_factor
         transformation_matrix[0, 3] = translation[0]
         transformation_matrix[1, 3] = translation[1]
@@ -168,14 +167,12 @@ def process_data(pcd_fp, binvox_fp, output_fp, resolution=32, k=5):
         pcd_fp += '/'
     category_name = pcd_fp.split('/')[-2]
     output_fp = os.path.join(output_fp, category_name)
-    if not os.path.exists(output_fp):
-        os.makedirs(output_fp)
 
     shape_names = [os.path.splitext(each)[0] for each in os.listdir(os.path.join(pcd_fp, 'points'))]
     for shape_name in tqdm(shape_names):
         shape_dir = os.path.join(output_fp, shape_name)
         if not os.path.exists(shape_dir):
-            os.mkdir(shape_dir)
+            os.makedirs(shape_dir)
 
         binvox_path = os.path.join(binvox_fp, shape_name, 'model.binvox')
         with open(binvox_path, 'rb') as f:
