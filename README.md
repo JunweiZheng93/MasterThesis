@@ -67,7 +67,7 @@ PYTHONPATH=path_of_project_root python utils/data_preprocessing.py -h
 
 ### Using our dataset
 
-chair: [03001627.zip(531MB)](https://gitlab.com/JunweiZheng93/shapenetsegvox/-/raw/master/03001627.zip?inline=false) <br>
+chair: [03001627.zip(681MB)](https://gitlab.com/JunweiZheng93/shapenetsegvox/-/raw/master/03001627.zip?inline=false) <br>
 number of shapes: 3746 <br>
 maximal number of parts: 4
 
@@ -75,11 +75,11 @@ table: <br>
 number of shapes: 5263 <br>
 maximal number of parts: 3
 
-airplane: <br>
+airplane: [02691156.zip(278MB)](https://gitlab.com/JunweiZheng93/shapenetsegvox/-/raw/master/02691156.zip?inline=false) <br>
 number of shape: 2690 <br>
 maximal number of parts: 4
 
-lamp: <br>
+lamp: [03636649.zip(200MB)](https://gitlab.com/JunweiZheng93/shapenetsegvox/-/raw/master/03636649.zip?inline=false) <br>
 number of shapes: 1546 <br>
 maximal number of parts: 4
 
