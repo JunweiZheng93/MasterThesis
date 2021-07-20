@@ -237,8 +237,8 @@ class Resampling(keras.layers.Layer):
         batch_grids = self._affine_grid_generator(input_fmap, theta)
 
         # x_s, y_s and z_s have shape (B, num_parts, H, W, D)
-        x_s = batch_grids[:, :, 0, :, :, :]
-        y_s = batch_grids[:, :, 1, :, :, :]
+        y_s = batch_grids[:, :, 0, :, :, :]
+        x_s = batch_grids[:, :, 1, :, :, :]
         z_s = batch_grids[:, :, 2, :, :, :]
 
         # output_fmap has shape (B, num_parts, H, W, D, C)
@@ -268,7 +268,7 @@ class Resampling(keras.layers.Layer):
         x = tf.linspace(-1.0, 1.0, W)
         y = tf.linspace(-1.0, 1.0, H)
         z = tf.linspace(-1.0, 1.0, D)
-        x_t, y_t, z_t = tf.meshgrid(x, y, z)
+        y_t, x_t, z_t = tf.meshgrid(y, x, z)
 
         # flatten every x, y, z coordinates
         x_t_flat = tf.reshape(x_t, [-1])
@@ -278,7 +278,7 @@ class Resampling(keras.layers.Layer):
 
         # reshape to (x_t, y_t, z_t, 1), which is homogeneous form
         ones = tf.ones_like(x_t_flat)
-        sampling_grid = tf.stack([x_t_flat, y_t_flat, z_t_flat, ones])
+        sampling_grid = tf.stack([y_t_flat, x_t_flat, z_t_flat, ones])
         # sampling_grid now has shape (4, H*W*D)
 
         # repeat the grid num_batch times along axis=0 and num_parts times along axis=1
@@ -320,12 +320,9 @@ class Resampling(keras.layers.Layer):
         zero = tf.zeros([], dtype='int32')
 
         # rescale x/y/z to [0, W-1/H-1/D-1]
-        x = tf.cast(x, 'float32')
-        y = tf.cast(y, 'float32')
-        z = tf.cast(z, 'float32')
-        x = 0.5 * ((x + 1.0) * tf.cast(max_x - 1, 'float32'))
-        y = 0.5 * ((y + 1.0) * tf.cast(max_y - 1, 'float32'))
-        z = 0.5 * ((z + 1.0) * tf.cast(max_z - 1, 'float32'))
+        x = 0.5 * ((x + 1.0) * tf.cast(max_x, 'float32'))
+        y = 0.5 * ((y + 1.0) * tf.cast(max_y, 'float32'))
+        z = 0.5 * ((z + 1.0) * tf.cast(max_z, 'float32'))
 
         # grab 8 nearest corner points for each (x_i, y_i, z_i) in input_fmap
         # 2*2*2 combination, so that there are 8 corner points in total
@@ -367,14 +364,19 @@ class Resampling(keras.layers.Layer):
         zd = z - z0
 
         # compute output (this is the  trilinear interpolation formula in real world coordinate system)
-        output_fmap = list()
-        for channel in range(C):
-            output_fmap_channel = c000[:, :, :, :, :, channel] * (1 - xd) * (1 - yd) * (1 - zd) + c100[:, :, :, :, :, channel] * xd * (1 - yd) * (1 - zd) + \
-                                  c010[:, :, :, :, :, channel] * (1 - xd) * yd * (1 - zd) + c001[:, :, :, :, :, channel] * (1 - xd) * (1 - yd) * zd + \
-                                  c101[:, :, :, :, :, channel] * xd * (1 - yd) * zd + c011[:, :, :, :, :, channel] * (1 - xd) * yd * zd + \
-                                  c110[:, :, :, :, :, channel] * xd * yd * (1 - zd) + c111[:, :, :, :, :, channel] * xd * yd * zd
-            output_fmap.append(output_fmap_channel)
-        return tf.stack(output_fmap, axis=5)
+        xd = tf.expand_dims(xd, axis=5)
+        yd = tf.expand_dims(yd, axis=5)
+        zd = tf.expand_dims(zd, axis=5)
+        xd = tf.tile(xd, [1, 1, 1, 1, 1, C])
+        yd = tf.tile(yd, [1, 1, 1, 1, 1, C])
+        zd = tf.tile(zd, [1, 1, 1, 1, 1, C])
+        output_fmap = c000 * (1 - xd) * (1 - yd) * (1 - zd) + c100 * xd * (1 - yd) * (1 - zd) + \
+                      c010 * (1 - xd) * yd * (1 - zd) + c001 * (1 - xd) * (1 - yd) * zd + \
+                      c101 * xd * (1 - yd) * zd + c011 * (1 - xd) * yd * zd + \
+                      c110 * xd * yd * (1 - zd) + c111 * xd * yd * zd
+        # output_fmap has shape (B, num_parts, H, W, D, C)
+
+        return output_fmap
 
     @staticmethod
     def _get_voxel_value(input_fmap, x, y, z):
@@ -431,20 +433,20 @@ class Composer(keras.layers.Layer):
         reconstructed_shape = tf.reduce_sum(output_fmap, axis=1)
         reconstructed_shape = tf.where(reconstructed_shape >= 1., 1., 0.)
 
-        resolution = tf.shape(output_fmap)[2]
-        C = tf.shape(output_fmap)[5]
+        resolution = tf.shape(output_fmap)[2].numpy()
+        C = tf.shape(output_fmap)[5].numpy()
         vote_dict = dict()
         reconstructed_shape_label_list = list()
         for each_shape in output_fmap:
             for part_label, each_part in enumerate(each_shape):
-                part_label_coord = tf.where(each_part >= 1.)
-                for coord in part_label_coord:
-                    code = int(coord[0] + coord[1] * resolution + coord[2] * resolution ** 2, coord[3] * C * resolution ** 2)
+                part_label_cord = tf.where(each_part >= 1.)
+                for cord in part_label_cord:
+                    code = (cord[0] + cord[1] * resolution + cord[2] * resolution ** 2 + cord[3] * C * resolution ** 2).numpy()
                     if code not in list(vote_dict.keys()):
-                        vote_dict[code] = [part_label]
+                        vote_dict[code] = [part_label + 1]
                     else:
-                        vote_dict[code].append(part_label)
-            reconstructed_part_label = tf.zeros((resolution, resolution, resolution, C),  dtype=tf.int32)
+                        vote_dict[code].append(part_label + 1)
+            reconstructed_part_label = np.zeros((resolution, resolution, resolution, C),  dtype='uint8')
             for code in list(vote_dict.keys()):
                 count_list = vote_dict[code]
                 voxel_label = max(set(count_list), key=count_list.count)
