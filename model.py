@@ -160,8 +160,7 @@ class SharedPartDecoder(keras.layers.Layer):
         x = self.deconv5(x)
         x = self.act5(x)
         x = self.bn5(x, training=training)
-        x = self.dropout5(x, training=training)
-        outputs = tf.transpose(x, [0, 2, 3, 1, 4])
+        outputs = self.dropout5(x, training=training)
 
         return outputs
 

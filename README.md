@@ -71,7 +71,7 @@ chair: [03001627.zip(681MB)](https://gitlab.com/JunweiZheng93/shapenetsegvox/-/r
 number of shapes: 3746 <br>
 maximal number of parts: 4
 
-table: <br>
+table: [04379243.zip(666MB)](https://gitlab.com/JunweiZheng93/shapenetsegvox/-/raw/master/04379243.zip?inline=false) <br>
 number of shapes: 5263 <br>
 maximal number of parts: 3
 

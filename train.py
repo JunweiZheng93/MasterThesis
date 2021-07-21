@@ -36,10 +36,11 @@ def train_model(category='chair',
     my_model = model.Model(num_parts=max_num_parts)
 
     # training process 1
+    print('Start training process 1, please wait...')
     process1_saved_path = os.path.join(result_saved_path, 'process_1')
     if not os.path.exists(process1_saved_path):
         os.makedirs(process1_saved_path)
-    checkpoint_callback = tf.keras.callbacks.ModelCheckpoint(filepath=os.path.join(process1_saved_path, 'checkpoint.tf'),
+    checkpoint_callback = tf.keras.callbacks.ModelCheckpoint(filepath=os.path.join(process1_saved_path, 'checkpoint.h5'),
                                                              monitor='Total_Loss',
                                                              verbose=info_verbose,
                                                              save_best_only=True,
@@ -56,10 +57,11 @@ def train_model(category='chair',
                  use_multiprocessing=use_multiprocessing)
 
     # training process 2
+    print('Start training process 2, please wait...')
     process2_saved_path = os.path.join(result_saved_path, 'process_2')
     if not os.path.exists(process2_saved_path):
         os.makedirs(process2_saved_path)
-    checkpoint_callback = tf.keras.callbacks.ModelCheckpoint(filepath=os.path.join(process2_saved_path, 'checkpoint.tf'),
+    checkpoint_callback = tf.keras.callbacks.ModelCheckpoint(filepath=os.path.join(process2_saved_path, 'checkpoint.h5'),
                                                              monitor='Transformation_Loss',
                                                              verbose=info_verbose,
                                                              save_best_only=True,
@@ -76,10 +78,11 @@ def train_model(category='chair',
                  use_multiprocessing=use_multiprocessing)
 
     # training process 3
+    print('Start training process 3, please wait...')
     process3_saved_path = os.path.join(result_saved_path, 'process_3')
     if not os.path.exists(process3_saved_path):
         os.makedirs(process3_saved_path)
-    checkpoint_callback = tf.keras.callbacks.ModelCheckpoint(filepath=os.path.join(process3_saved_path, 'checkpoint.tf'),
+    checkpoint_callback = tf.keras.callbacks.ModelCheckpoint(filepath=os.path.join(process3_saved_path, 'checkpoint.h5'),
                                                              monitor='Total_Loss',
                                                              verbose=info_verbose,
                                                              save_best_only=True,
@@ -106,9 +109,9 @@ if __name__ == '__main__':
                 run_eagerly=True,
                 epochs=(1, 1, 1),
                 shuffle=True,
-                max_queue_size=32,
-                workers=4,
                 use_multiprocessing=False,
+                workers=4,
+                max_queue_size=32,
                 info_verbose=0,
                 resume_training=False,
                 resume_training_path=None,

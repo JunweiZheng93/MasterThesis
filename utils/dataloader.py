@@ -8,7 +8,7 @@ from tqdm import tqdm
 
 CATEGORY_MAP = {'chair': '03001627', 'table': '04379243', 'airplane': '02691156', 'lamp': '03636649'}
 URL_MAP = {'chair': 'https://gitlab.com/JunweiZheng93/shapenetsegvox/-/raw/master/03001627.zip?inline=false',
-           'table': '',
+           'table': 'https://gitlab.com/JunweiZheng93/shapenetsegvox/-/raw/master/04379243.zip?inline=false',
            'airplane': 'https://gitlab.com/JunweiZheng93/shapenetsegvox/-/raw/master/02691156.zip?inline=false',
            'lamp': 'https://gitlab.com/JunweiZheng93/shapenetsegvox/-/raw/master/03636649.zip?inline=false'}
 PROJ_ROOT = os.path.abspath(__file__)[:-19]
@@ -58,9 +58,9 @@ def get_dataset(category='chair', batch_size=32, split_ratio=0.8, max_num_parts=
         all_trans.append(transformations)
 
     training_set = Dataset(all_voxel_grid[:num_training_samples], all_part[:num_training_samples],
-                           all_trans[:num_training_samples], batch_size, max_num_parts)
+                           all_trans[:num_training_samples], batch_size)
     test_set = Dataset(all_voxel_grid[num_training_samples:], all_part[num_training_samples:],
-                       all_trans[num_training_samples:], batch_size, max_num_parts)
+                       all_trans[num_training_samples:], batch_size)
 
     return training_set, test_set
 
@@ -211,12 +211,11 @@ def get_fp(category_fp):
 
 class Dataset(Sequence):
 
-    def __init__(self, all_voxel_grid, all_part, all_trans, batch_size, max_num_parts):
+    def __init__(self, all_voxel_grid, all_part, all_trans, batch_size):
         self.all_voxel_grid = all_voxel_grid
         self.all_part = all_part
         self.all_trans = all_trans
         self.batch_size = batch_size
-        self.max_num_parts = max_num_parts
 
     def __len__(self):
         return math.ceil(len(self.all_voxel_grid) / self.batch_size)
