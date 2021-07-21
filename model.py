@@ -432,29 +432,29 @@ class Composer(keras.layers.Layer):
         reconstructed_shape = tf.reduce_sum(output_fmap, axis=1)
         reconstructed_shape = tf.where(reconstructed_shape >= 1., 1., 0.)
 
-        resolution = tf.shape(output_fmap)[2].numpy()
-        C = tf.shape(output_fmap)[5].numpy()
-        vote_dict = dict()
-        reconstructed_shape_label_list = list()
-        for each_shape in output_fmap:
-            for part_label, each_part in enumerate(each_shape):
-                part_label_cord = tf.where(each_part >= 1.)
-                for cord in part_label_cord:
-                    code = (cord[0] + cord[1] * resolution + cord[2] * resolution ** 2 + cord[3] * C * resolution ** 2).numpy()
-                    if code not in list(vote_dict.keys()):
-                        vote_dict[code] = [part_label + 1]
-                    else:
-                        vote_dict[code].append(part_label + 1)
-            reconstructed_part_label = np.zeros((resolution, resolution, resolution, C),  dtype='uint8')
-            for code in list(vote_dict.keys()):
-                count_list = vote_dict[code]
-                voxel_label = max(set(count_list), key=count_list.count)
-                idx = [code % resolution, code // resolution % resolution, code // resolution // resolution % resolution,
-                       code // resolution // resolution // resolution % C]
-                reconstructed_part_label[idx[0], idx[1], idx[2], idx[3]] = voxel_label
-            reconstructed_shape_label_list.append(reconstructed_part_label)
-        reconstructed_shape_label = tf.convert_to_tensor(reconstructed_shape_label_list)
-        return reconstructed_shape, reconstructed_shape_label
+        # resolution = tf.shape(output_fmap)[2].numpy()
+        # C = tf.shape(output_fmap)[5].numpy()
+        # vote_dict = dict()
+        # reconstructed_shape_label_list = list()
+        # for each_shape in output_fmap:
+        #     for part_label, each_part in enumerate(each_shape):
+        #         part_label_cord = tf.where(each_part >= 1.)
+        #         for cord in part_label_cord:
+        #             code = (cord[0] + cord[1] * resolution + cord[2] * resolution ** 2 + cord[3] * C * resolution ** 2).numpy()
+        #             if code not in list(vote_dict.keys()):
+        #                 vote_dict[code] = [part_label + 1]
+        #             else:
+        #                 vote_dict[code].append(part_label + 1)
+        #     reconstructed_part_label = np.zeros((resolution, resolution, resolution, C),  dtype='uint8')
+        #     for code in list(vote_dict.keys()):
+        #         count_list = vote_dict[code]
+        #         voxel_label = max(set(count_list), key=count_list.count)
+        #         idx = [code % resolution, code // resolution % resolution, code // resolution // resolution % resolution,
+        #                code // resolution // resolution // resolution % C]
+        #         reconstructed_part_label[idx[0], idx[1], idx[2], idx[3]] = voxel_label
+        #     reconstructed_shape_label_list.append(reconstructed_part_label)
+        # reconstructed_shape_label = tf.convert_to_tensor(reconstructed_shape_label_list)
+        return reconstructed_shape, output_fmap
 
 
 class Model(keras.Model):

@@ -8,27 +8,25 @@ import os
 
 PROJ_ROOT = os.path.abspath(__file__)[:-8]
 
-gpus = tf.config.experimental.list_physical_devices("GPU")
-if gpus:
-    for gpu in gpus:
-        tf.config.experimental.set_memory_growth(gpu, True)
-
 
 def train_model(category='chair',
                 batch_size=32,
                 split_ratio=0.8,
                 max_num_parts=4,
                 optimizer='adam',
-                run_eagerly=True,
                 epochs=(150, 100, 250),
                 shuffle=True,
-                max_queue_size=32,
-                workers=4,
-                use_multiprocessing=True,
                 info_verbose=0,
                 resume_training=False,
                 resume_training_path=None,
-                initial_epoch=0):
+                initial_epoch=0,
+                which_gpu=0):
+
+    gpus = tf.config.experimental.list_physical_devices("GPU")
+    if gpus:
+        for gpu in gpus:
+            tf.config.experimental.set_memory_growth(gpu, True)
+            tf.config.experimental.set_visible_devices(gpus[which_gpu], "GPU")
 
     training_set, test_set = dataloader.get_dataset(category=category, batch_size=batch_size, split_ratio=split_ratio,
                                                     max_num_parts=max_num_parts)
@@ -49,12 +47,10 @@ def train_model(category='chair',
     tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=os.path.join(process1_saved_path, 'logs'),
                                                           histogram_freq=1,
                                                           profile_batch=0)
-    my_model.compile(optimizer=optimizer, run_eagerly=run_eagerly)
+    my_model.compile(optimizer=optimizer, run_eagerly=True)
     callbacks = [checkpoint_callback, tensorboard_callback]
     my_model.choose_training_process(training_process=1)
-    my_model.fit(training_set, epochs=epochs[0], callbacks=callbacks, shuffle=shuffle,
-                 initial_epoch=initial_epoch, max_queue_size=max_queue_size, workers=workers,
-                 use_multiprocessing=use_multiprocessing)
+    my_model.fit(training_set, epochs=epochs[0], callbacks=callbacks, shuffle=shuffle, initial_epoch=initial_epoch)
 
     # training process 2
     print('Start training process 2, please wait...')
@@ -70,12 +66,10 @@ def train_model(category='chair',
     tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=os.path.join(process2_saved_path, 'logs'),
                                                           histogram_freq=1,
                                                           profile_batch=0)
-    my_model.compile(optimizer=optimizer, run_eagerly=run_eagerly)
+    my_model.compile(optimizer=optimizer, run_eagerly=True)
     callbacks = [checkpoint_callback, tensorboard_callback]
     my_model.choose_training_process(training_process=2)
-    my_model.fit(training_set, epochs=epochs[1], callbacks=callbacks, shuffle=shuffle,
-                 initial_epoch=initial_epoch, max_queue_size=max_queue_size, workers=workers,
-                 use_multiprocessing=use_multiprocessing)
+    my_model.fit(training_set, epochs=epochs[1], callbacks=callbacks, shuffle=shuffle, initial_epoch=initial_epoch)
 
     # training process 3
     print('Start training process 3, please wait...')
@@ -91,28 +85,23 @@ def train_model(category='chair',
     tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=os.path.join(process3_saved_path, 'logs'),
                                                           histogram_freq=1,
                                                           profile_batch=0)
-    my_model.compile(optimizer=optimizer, run_eagerly=run_eagerly)
+    my_model.compile(optimizer=optimizer, run_eagerly=True)
     callbacks = [checkpoint_callback, tensorboard_callback]
     my_model.choose_training_process(training_process=3)
-    my_model.fit(training_set, epochs=epochs[2], callbacks=callbacks, shuffle=shuffle,
-                 initial_epoch=initial_epoch, max_queue_size=max_queue_size, workers=workers,
-                 use_multiprocessing=use_multiprocessing)
+    my_model.fit(training_set, epochs=epochs[2], callbacks=callbacks, shuffle=shuffle, initial_epoch=initial_epoch)
 
 
 if __name__ == '__main__':
 
     train_model(category='chair',
-                batch_size=1,
+                batch_size=32,
                 split_ratio=0.8,
                 max_num_parts=4,
                 optimizer='adam',
-                run_eagerly=True,
-                epochs=(1, 1, 1),
+                epochs=(10, 6, 15),
                 shuffle=True,
-                use_multiprocessing=False,
-                workers=4,
-                max_queue_size=32,
                 info_verbose=0,
                 resume_training=False,
                 resume_training_path=None,
-                initial_epoch=0)
+                initial_epoch=0,
+                which_gpu=7)
