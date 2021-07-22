@@ -267,7 +267,7 @@ class Resampling(keras.layers.Layer):
         x = tf.linspace(-1.0, 1.0, W)
         y = tf.linspace(-1.0, 1.0, H)
         z = tf.linspace(-1.0, 1.0, D)
-        y_t, x_t, z_t = tf.meshgrid(y, x, z)
+        x_t, y_t, z_t = tf.meshgrid(x, y, z)
 
         # flatten every x, y, z coordinates
         x_t_flat = tf.reshape(x_t, [-1])
@@ -340,8 +340,9 @@ class Resampling(keras.layers.Layer):
         z0 = tf.clip_by_value(z0, zero, max_z)
         z1 = tf.clip_by_value(z1, zero, max_z)
 
-        # get voxel value at corner coords
+        # get voxel value of corner coordinates
         # pay attention to the difference of the ordering between real world coordinates and voxel coordinates
+        # reference: https://blog.csdn.net/webzhuce/article/details/86585489
         c000 = self._get_voxel_value(input_fmap, x0, y1, z0)
         c001 = self._get_voxel_value(input_fmap, x0, y1, z1)
         c010 = self._get_voxel_value(input_fmap, x0, y0, z0)
@@ -432,28 +433,6 @@ class Composer(keras.layers.Layer):
         reconstructed_shape = tf.reduce_sum(output_fmap, axis=1)
         reconstructed_shape = tf.where(reconstructed_shape >= 1., 1., 0.)
 
-        # resolution = tf.shape(output_fmap)[2].numpy()
-        # C = tf.shape(output_fmap)[5].numpy()
-        # vote_dict = dict()
-        # reconstructed_shape_label_list = list()
-        # for each_shape in output_fmap:
-        #     for part_label, each_part in enumerate(each_shape):
-        #         part_label_cord = tf.where(each_part >= 1.)
-        #         for cord in part_label_cord:
-        #             code = (cord[0] + cord[1] * resolution + cord[2] * resolution ** 2 + cord[3] * C * resolution ** 2).numpy()
-        #             if code not in list(vote_dict.keys()):
-        #                 vote_dict[code] = [part_label + 1]
-        #             else:
-        #                 vote_dict[code].append(part_label + 1)
-        #     reconstructed_part_label = np.zeros((resolution, resolution, resolution, C),  dtype='uint8')
-        #     for code in list(vote_dict.keys()):
-        #         count_list = vote_dict[code]
-        #         voxel_label = max(set(count_list), key=count_list.count)
-        #         idx = [code % resolution, code // resolution % resolution, code // resolution // resolution % resolution,
-        #                code // resolution // resolution // resolution % C]
-        #         reconstructed_part_label[idx[0], idx[1], idx[2], idx[3]] = voxel_label
-        #     reconstructed_shape_label_list.append(reconstructed_part_label)
-        # reconstructed_shape_label = tf.convert_to_tensor(reconstructed_shape_label_list)
         return reconstructed_shape, output_fmap
 
 
@@ -544,15 +523,18 @@ class Model(keras.Model):
         if self.training_process == 1:
             # decomposer output has shape (num_parts, B, encoding_dims)
             decomposer_output = self.decomposer(inputs, training=training)
-            # composer output has shape (B, H, W, D, C)
-            self.composer(decomposer_output, training=training)
+            # composer output is a tuple. The first element of the tuple has shape (B, H, W, D, C), the second one
+            # has shape (B, num_parts, H, W, D, C)
+            composer_output = self.composer(decomposer_output, training=training)
+            return decomposer_output, composer_output
 
         elif self.training_process == 2:
             # decomposer output has shape (num_parts, B, encoding_dims)
             decomposer_output = self.decomposer(inputs, training=training)
-            # composer output has shape (B, H, W, D, C)
-            self.composer(decomposer_output, training=training)
-            return decomposer_output
+            # composer output is a tuple. The first element of the tuple has shape (B, H, W, D, C), the second one
+            # has shape (B, num_parts, H, W, D, C)
+            composer_output = self.composer(decomposer_output, training=training)
+            return decomposer_output, composer_output
 
         elif self.training_process == 3:
             # decomposer output has shape (num_parts, B, encoding_dims)
@@ -567,7 +549,8 @@ class Model(keras.Model):
                 raise ValueError('mode should be one of mix and de_mix')
             # mixed decomposer output has shape (num_parts, B, encoding_dims)
             decomposer_output = self._mix(decomposer_output, order, mode='encoding')
-            # composer output has shape (B, H, W, D, C)
+            # composer output is a tuple. The first element of the tuple has shape (B, H, W, D, C), the second one
+            # has shape (B, num_parts, H, W, D, C)
             composer_output = self.composer(decomposer_output, training=training)
             return decomposer_output, composer_output, order
 
@@ -578,7 +561,7 @@ class Model(keras.Model):
 
         if self.training_process == 1:  # training process for pretraining BinaryShapeEncoder, Projection, PartDecoder
             with tf.GradientTape() as tape:
-                self.call(x, training=True)
+                decomposer_output, composer_output = self.call(x, training=True)
                 pi_loss = self._cal_pi_loss()
                 part_recon_loss = self._cal_part_reconstruction_loss(label, self.composer.stacked_decoded_parts)
                 total_loss = pi_loss + part_recon_loss
@@ -598,7 +581,7 @@ class Model(keras.Model):
 
         elif self.training_process == 2:  # training process for pretraining STN
             with tf.GradientTape() as tape:
-                decomposer_output = self.call(x, training=True)
+                decomposer_output, composer_output = self.call(x, training=True)
                 num_parts, B, _ = decomposer_output.shape
                 trans_loss = self._cal_transformation_loss(trans,
                                                            tf.reshape(self.composer.stn.theta, (B, num_parts, 3, 4)))
@@ -628,7 +611,8 @@ class Model(keras.Model):
                                                             tf.reshape(self.composer.stn.theta, (B, num_parts, 3, 4)))
 
                 # below is the second application:
-                _, composer_output, _ = self.call(composer_output[0], training=True, mode='de_mix', mixed_order=mixed_order)
+                decomposer_output, composer_output, _ = self.call(composer_output[0], training=True, mode='de_mix',
+                                                                  mixed_order=mixed_order)
                 de_mixed_label = label
                 de_mixed_trans = trans
                 pi_loss2 = self._cal_pi_loss()
