@@ -561,7 +561,7 @@ class Model(keras.Model):
 
         if self.training_process == 1:  # training process for pretraining BinaryShapeEncoder, Projection, PartDecoder
             with tf.GradientTape() as tape:
-                decomposer_output, composer_output = self.call(x, training=True)
+                decomposer_output, composer_output = self(x, training=True)
                 pi_loss = self._cal_pi_loss()
                 part_recon_loss = self._cal_part_reconstruction_loss(label, self.composer.stacked_decoded_parts)
                 total_loss = pi_loss + part_recon_loss
@@ -581,7 +581,7 @@ class Model(keras.Model):
 
         elif self.training_process == 2:  # training process for pretraining STN
             with tf.GradientTape() as tape:
-                decomposer_output, composer_output = self.call(x, training=True)
+                decomposer_output, composer_output = self(x, training=True)
                 num_parts, B, _ = decomposer_output.shape
                 trans_loss = self._cal_transformation_loss(trans,
                                                            tf.reshape(self.composer.stn.theta, (B, num_parts, 3, 4)))
@@ -596,7 +596,7 @@ class Model(keras.Model):
         elif self.training_process == 3:  # training process for fine tune all parameters using cycle loss
             with tf.GradientTape() as tape:
                 # below is the first application:
-                decomposer_output, composer_output, mixed_order = self.call(x, training=True, mode='mix')
+                decomposer_output, composer_output, mixed_order = self(x, training=True, mode='mix')
                 # mixed label has shape (B, num_parts, H, W, D, C)
                 mixed_label = self._mix(label, mixed_order, mode='label')
                 # mixed trans has shape (B, num_parts, 3, 4)
@@ -611,8 +611,7 @@ class Model(keras.Model):
                                                             tf.reshape(self.composer.stn.theta, (B, num_parts, 3, 4)))
 
                 # below is the second application:
-                decomposer_output, composer_output, _ = self.call(composer_output[0], training=True, mode='de_mix',
-                                                                  mixed_order=mixed_order)
+                decomposer_output, composer_output, _ = self(composer_output[0], training=True, mode='de_mix', mixed_order=mixed_order)
                 de_mixed_label = label
                 de_mixed_trans = trans
                 pi_loss2 = self._cal_pi_loss()
