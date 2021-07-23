@@ -21,7 +21,16 @@ def evaluate_model(model_path,
                    D=32,
                    C=1):
 
-    num_parts = 3 if category == 'table' else 4
+    if mode == 'batch':
+        num_parts = 3 if category == 'table' else 4
+    elif mode == 'single':
+        if not single_shape_path.endswith('/'):
+            single_shape_path += '/'
+        category_code = single_shape_path.split('/')[-3]
+        category = list(CATEGORY_MAP.keys())[list(CATEGORY_MAP.values()).index(category_code)]
+        num_parts = 3 if category == 'table' else 4
+    else:
+        raise ValueError('mode should be one of batch or single!')
 
     warm_up_data = tf.ones((1, H, W, D, C), dtype=tf.float32)
     my_model = model.Model(num_parts=num_parts)
@@ -51,7 +60,7 @@ def evaluate_model(model_path,
             pred_label = pred_label.numpy().astype('uint8')
             visualization.visualize(pred_label)
 
-    elif mode == 'single':
+    else:
 
         gt_label = scipy.io.loadmat(os.path.join(single_shape_path, 'object_labeled.mat'))['data']
         visualization.visualize(gt_label)
@@ -63,9 +72,6 @@ def evaluate_model(model_path,
         pred_label = get_pred_label(my_model, gt_shape)
         pred_label = pred_label.numpy().astype('uint8')
         visualization.visualize(pred_label)
-
-    else:
-        raise ValueError('mode should be one of batch or single!')
 
 
 def get_pred_label(model, gt):

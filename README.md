@@ -23,8 +23,8 @@ To set up python virtual environment: <br>
 Follow the [installation instruction of MiniConda](https://docs.conda.io/en/latest/miniconda.html#) and then run 
 the following snippet using your favourite terminal application:
 ```bash
-conda create -n py36 python=3.6
-conda activate py36
+conda create -n py37 python=3.7
+conda activate py37
 ```
 
 To install all necessary packages:
@@ -87,9 +87,57 @@ maximal number of parts: 4
 
 The generated dataset consists of some PNG images and `.mat` files. To visualize `.mat` files, please run:
 ```bash
+cd path_of_the_project_root
 PYTHONPATH=path_of_project_root python utils/visualization.py path_of_mat_file
 ```
 
 ## Training
 
-TBA...
+Our training script is user-friendly. The only thing you need to do is to open your favourite terminal application and
+type:
+```bash
+cd path_of_the_project_root
+PYTHONPATH=path_of_project_root python train.py 
+```
+Firstly, the training script will ask you if you want to take some notes for the training. If yes, it will open `vim`
+and you can start typing. After finish typing, use `:wq` to exit `vim` (check how to use `vim`) and the note will be save automatically. 
+The training script will then download the necessary dataset automatically, place the dataset to the correct directory and
+start training according to the hyper-parameter you have set. All results (notes you have taken, all hyper-parameters, 
+tensorboard logs, model weights in `.h5` format and so on) will be saved automatically in `project_root/results/`.
+
+In order to modify the hyper-parameters for training, please open `hparam.py` and change the value over there.
+
+## Evaluation
+
+### batch mode
+
+The default mode of the evaluation is batch mode. That means it will show you a batch of shapes (default values is 4 
+shapes and will be picked randomly in the same category). Firstly, the ground truth shape will be shown for shape #1, and then
+the model output shape for shape #1. Secondly, the ground truth shape for shape #2 will be shown and then the model output
+shape for shape #2. The process will go on until shape #4.
+
+To run batch mode, please type:
+```bash
+cd path_of_the_project_root
+PYTHONPATH=path_of_project_root python evaluate.py model_path --category the_category_you_want_to_choose
+```
+For example, if you want to evaluate how good you model is for the category `chair` (assume your model is saved in 
+`project_root/results/20210723162046/process_3/checkpoint.h5`), you need to type:
+```bash
+PYTHONPATH=path_of_project_root python evaluate.py project_root/results/20210723162046/process_3/checkpoint.h5
+```
+`chair` is the default category. so you don't need to set value for `--category`.
+
+### single mode
+
+Single mode allows you to check the evaluation result for one specific shape. For example, if you want to evaluate how 
+good you model is for the shape `03001627/1a38407b3036795d19fb4103277a6b93`(it is a shape in catergory `chair`)
+and assume your model is saved in `project_root/results/20210723162046/process_3/checkpoint.h5`, you should type:
+```bash
+PYTHONPATH=path_of_project_root python evaluate.py project_root/results/20210723162046/process_3/checkpoint.h5 --mode single
+--single_shape_path datasets/03001627/1a38407b3036795d19fb4103277a6b93/
+```
+For more usage of `evaluate.py`, please type:
+```bash
+PYTHONPATH=path_of_project_root python evaluate.py -h
+```
