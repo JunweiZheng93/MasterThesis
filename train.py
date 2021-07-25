@@ -1,3 +1,4 @@
+import sys
 import tensorflow as tf
 from utils import dataloader
 from datetime import datetime
@@ -19,7 +20,9 @@ def train_model(category='chair',
                 lr=0.001,
                 decay_rate=0.8,
                 decay_step_size=50,
+                training_process='all',
                 epochs=(150, 100, 250),
+                model_path=None,
                 shuffle=True,
                 which_gpu=0):
 
@@ -34,15 +37,65 @@ def train_model(category='chair',
                                                     max_num_parts=max_num_parts)
     # create model
     my_model = model.Model(num_parts=max_num_parts)
-    # training process 1
-    _execute_training_process(my_model, training_set, test_set, epochs[0], shuffle, 1, optimizer, lr, decay_rate,
-                              decay_step_size, RESULT_PATH)
-    # training process 2
-    _execute_training_process(my_model, training_set, test_set, epochs[1], shuffle, 2, optimizer, lr, decay_rate,
-                              decay_step_size, RESULT_PATH)
-    # training process 3
-    _execute_training_process(my_model, training_set, test_set, epochs[2], shuffle, 3, optimizer, lr, decay_rate,
-                              decay_step_size, RESULT_PATH)
+
+    if training_process == 'all':
+        if type(epochs) != tuple:
+            raise ValueError('epochs should be a tuple, whose elements inside are the epoch for training '
+                             'process 1, 2 and 3 respectively.')
+        # training process 1
+        _execute_training_process(my_model, training_set, test_set, epochs[0], shuffle, 1, optimizer, lr, decay_rate,
+                                  decay_step_size, RESULT_PATH)
+        # training process 2
+        _execute_training_process(my_model, training_set, test_set, epochs[1], shuffle, 2, optimizer, lr, decay_rate,
+                                  decay_step_size, RESULT_PATH)
+        # training process 3
+        _execute_training_process(my_model, training_set, test_set, epochs[2], shuffle, 3, optimizer, lr, decay_rate,
+                                  decay_step_size, RESULT_PATH)
+
+    elif training_process == 1 or training_process == '1':
+        if type(epochs) == tuple or type(epochs) == list:
+            raise ValueError(f'epochs should be an integer because you only choose process {training_process}')
+        _execute_training_process(my_model, training_set, test_set, epochs, shuffle, 1, optimizer, lr, decay_rate,
+                                  decay_step_size, RESULT_PATH)
+
+    elif training_process == 2 or training_process == '2':
+        if type(epochs) == tuple or type(epochs) == list:
+            raise ValueError(f'epochs should be an integer because you only choose process {training_process}')
+        warm_up_data = training_set.__iter__().__next__()[0]
+        my_model.choose_training_process(2)
+        my_model(warm_up_data)
+        ans = input('Please make sure the model_path is the path of model AFTER training process 1! Continue? y/n: ')
+        while True:
+            if ans == 'y' or ans == 'Y' or ans == 'Yes' or ans == 'yes':
+                my_model.load_weights(model_path)
+                _execute_training_process(my_model, training_set, test_set, epochs, shuffle, 2, optimizer, lr,
+                                          decay_rate, decay_step_size, RESULT_PATH)
+                break
+            elif ans == 'n' or ans == 'N' or ans == 'No' or ans == 'no':
+                sys.exit()
+            else:
+                ans = input('Please enter y/n: ')
+
+    elif training_process == 3 or training_process == '3':
+        if type(epochs) == tuple or type(epochs) == list:
+            raise ValueError(f'epochs should be an integer because you only choose process {training_process}')
+        warm_up_data = training_set.__iter__().__next__()[0]
+        my_model.choose_training_process(3)
+        my_model(warm_up_data)
+        ans = input('Please make sure the model_path is the path of model AFTER training process 2! Continue? y/n: ')
+        while True:
+            if ans == 'y' or ans == 'Y' or ans == 'Yes' or ans == 'yes':
+                my_model.load_weights(model_path)
+                _execute_training_process(my_model, training_set, test_set, epochs, shuffle, 3, optimizer, lr,
+                                          decay_rate, decay_step_size, RESULT_PATH)
+                break
+            elif ans == 'n' or ans == 'N' or ans == 'No' or ans == 'no':
+                sys.exit()
+            else:
+                ans = input('Please enter y/n: ')
+
+    else:
+        raise ValueError('training_process should be one of \'all\', 1, 2 and 3')
 
 
 def _configure_gpu(which_gpu):
@@ -132,6 +185,8 @@ if __name__ == '__main__':
                 lr=hparam['lr'],
                 decay_rate=hparam['decay_rate'],
                 decay_step_size=hparam['decay_step_size'],
+                training_process=hparam['training_process'],
                 epochs=hparam['epochs'],
+                model_path=hparam['model_path'],
                 shuffle=hparam['shuffle'],
                 which_gpu=hparam['which_gpu'])
