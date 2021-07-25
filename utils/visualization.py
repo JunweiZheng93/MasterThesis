@@ -6,7 +6,7 @@ import argparse
 import scipy.io
 
 
-def visualize(x, max_num_parts=8, show_axis=False, show_grid=False, cmap='Set2'):
+def visualize(x, max_num_parts=8, show_axis=False, show_grid=False, cmap='Set2', title=None):
     """
     :param x: ndarray. input data to be visualized.
     :param max_num_parts: maximal number of parts of the category. e.g. the maximal number of parts for the category
@@ -14,9 +14,10 @@ def visualize(x, max_num_parts=8, show_axis=False, show_grid=False, cmap='Set2')
     :param show_axis: show the axis of the figure or not.
     :param show_grid: show the grid of the figure or not.
     :param cmap: name of the cmap.
+    :param title: name of the window.
     """
 
-    fig = plt.figure()
+    fig = plt.figure(title)
     ax = fig.add_subplot(projection='3d')
     new_cmap = get_cmap(max_num_parts, cmap)
     label_color = np.take(new_cmap, x, axis=0)

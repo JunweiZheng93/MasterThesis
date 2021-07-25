@@ -15,11 +15,11 @@ class BinaryShapeEncoder(keras.layers.Layer):
         self.conv4 = layers.Conv3D(128, 3, (2, 2, 2), padding='same')
         self.conv5 = layers.Conv3D(256, 3, (2, 2, 2), padding='same')
 
-        self.act1 = layers.ReLU()
-        self.act2 = layers.ReLU()
-        self.act3 = layers.ReLU()
-        self.act4 = layers.ReLU()
-        self.act5 = layers.ReLU()
+        self.act1 = layers.LeakyReLU()
+        self.act2 = layers.LeakyReLU()
+        self.act3 = layers.LeakyReLU()
+        self.act4 = layers.LeakyReLU()
+        self.act5 = layers.LeakyReLU()
 
         self.bn1 = layers.BatchNormalization()
         self.bn2 = layers.BatchNormalization()
@@ -105,12 +105,11 @@ class SharedPartDecoder(keras.layers.Layer):
         self.deconv4 = layers.Conv3DTranspose(16, 5, (1, 1, 1), padding='same', output_padding=(0, 0, 0))
         self.deconv5 = layers.Conv3DTranspose(1, 5, (2, 2, 2), padding='same', output_padding=(1, 1, 1))
 
-        self.act = layers.ReLU()
-        self.act1 = layers.ReLU()
-        self.act2 = layers.ReLU()
-        self.act3 = layers.ReLU()
-        self.act4 = layers.ReLU()
-        self.act5 = layers.ReLU()
+        self.act = layers.LeakyReLU()
+        self.act1 = layers.LeakyReLU()
+        self.act2 = layers.LeakyReLU()
+        self.act3 = layers.LeakyReLU()
+        self.act4 = layers.LeakyReLU()
 
         self.bn = layers.BatchNormalization()
         self.bn1 = layers.BatchNormalization()
@@ -124,7 +123,6 @@ class SharedPartDecoder(keras.layers.Layer):
         self.dropout2 = layers.Dropout(0.2)
         self.dropout3 = layers.Dropout(0.2)
         self.dropout4 = layers.Dropout(0.2)
-        self.dropout5 = layers.Dropout(0.2)
 
     def call(self, inputs, training=False):
 
@@ -158,9 +156,7 @@ class SharedPartDecoder(keras.layers.Layer):
         x = self.dropout4(x, training=training)
 
         x = self.deconv5(x)
-        x = self.act5(x)
-        x = self.bn5(x, training=training)
-        outputs = self.dropout5(x, training=training)
+        outputs = self.bn5(x, training=training)
 
         return outputs
 
@@ -180,10 +176,10 @@ class LocalizationNet(keras.layers.Layer):
         self.final_fc1 = layers.Dense(128)
         self.final_fc2 = layers.Dense(num_parts*12)
 
-        self.stacked_act1 = layers.ReLU()
-        self.stacked_act2 = layers.ReLU()
-        self.summed_act1 = layers.ReLU()
-        self.final_act1 = layers.ReLU()
+        self.stacked_act1 = layers.LeakyReLU()
+        self.stacked_act2 = layers.LeakyReLU()
+        self.summed_act1 = layers.LeakyReLU()
+        self.final_act1 = layers.LeakyReLU()
 
         self.stacked_dropout1 = layers.Dropout(0.3)
         self.stacked_dropout2 = layers.Dropout(0.3)
@@ -423,9 +419,10 @@ class Composer(keras.layers.Layer):
 
         # stacked_decoded_part should be in the shape of (B, num_parts, H, W, D, C)
         self.stacked_decoded_parts = tf.stack(decoder_outputs, axis=1)
+        binary_stacked_decoded_parts = tf.where(self.stacked_decoded_parts > 0., 1., 0.)
         # summed_inputs should be in the shape of (B, encoding_dims)
         summed_inputs = tf.reduce_sum(inputs, axis=0)
-        localization_inputs = (self.stacked_decoded_parts, summed_inputs)
+        localization_inputs = (binary_stacked_decoded_parts, summed_inputs)
         # output_fmap has shape (B, num_parts, H, W, D, C)
         output_fmap = self.stn(localization_inputs, training=training)
         output_fmap = tf.where(output_fmap >= 0.5, 1., 0.)

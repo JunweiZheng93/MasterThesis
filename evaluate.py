@@ -49,7 +49,7 @@ def evaluate_model(model_path,
 
             gt_label_path = os.path.join(dataset_path, shape, 'object_labeled.mat')
             gt_label = scipy.io.loadmat(gt_label_path)['data']
-            visualization.visualize(gt_label)
+            visualization.visualize(gt_label, title=shape)
 
             shape_path = os.path.dirname(gt_label_path)
             gt_shape_path = os.path.join(shape_path, 'object_unlabeled.mat')
@@ -58,12 +58,13 @@ def evaluate_model(model_path,
             gt_shape = tf.expand_dims(gt_shape, 4)
             pred_label = get_pred_label(my_model, gt_shape)
             pred_label = pred_label.numpy().astype('uint8')
-            visualization.visualize(pred_label)
+            visualization.visualize(pred_label, title=shape)
 
     else:
 
+        shape_code = single_shape_path.split('/')[-2]
         gt_label = scipy.io.loadmat(os.path.join(single_shape_path, 'object_labeled.mat'))['data']
-        visualization.visualize(gt_label)
+        visualization.visualize(gt_label, title=shape_code)
 
         gt_shape_path = os.path.join(single_shape_path, 'object_unlabeled.mat')
         gt_shape = tf.convert_to_tensor(scipy.io.loadmat(gt_shape_path)['data'], dtype=tf.float32)
@@ -71,12 +72,13 @@ def evaluate_model(model_path,
         gt_shape = tf.expand_dims(gt_shape, 4)
         pred_label = get_pred_label(my_model, gt_shape)
         pred_label = pred_label.numpy().astype('uint8')
-        visualization.visualize(pred_label)
+        visualization.visualize(pred_label, title=shape_code)
 
 
 def get_pred_label(model, gt):
     _, composer_output = model(gt)
     pred = tf.squeeze(composer_output[1])
+    # pred = tf.squeeze(tf.where(model.composer.stacked_decoded_parts > 0.125, 1., 0.))
     code = 0
     for idx, each_part in enumerate(pred):
         code += each_part * 2 ** (idx + 1)
