@@ -17,6 +17,7 @@ def visualize(x, max_num_parts=8, show_axis=False, show_grid=False, cmap='Set2',
     :param title: name of the window.
     """
 
+    x = np.transpose(x, (0, 2, 1))
     fig = plt.figure(title)
     ax = fig.add_subplot(projection='3d')
     new_cmap = get_cmap(max_num_parts, cmap)
