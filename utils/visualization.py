@@ -77,4 +77,4 @@ if __name__ == '__main__':
 
     data = scipy.io.loadmat(args.mat_fp)
     x = data['data']
-    visualize(x, show_axis=args.show_axis, show_grid=args.show_grid, cmap=args.cmap)
+    visualize(x, show_axis=bool(args.show_axis), show_grid=bool(args.show_grid), cmap=args.cmap)

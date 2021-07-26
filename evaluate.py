@@ -19,8 +19,16 @@ def evaluate_model(model_path,
                    H=32,
                    W=32,
                    D=32,
-                   C=1):
+                   C=1,
+                   visualize_decoded_part=False,
+                   decoded_part_threshold=0.125,
+                   final_shape_threshold=0.5):
 
+    # check category
+    if category not in ['chair', 'table', 'airplane', 'lamp']:
+        raise ValueError('category should be one of chair, table, airplane and lamp!')
+
+    # check mode
     if mode == 'batch':
         num_parts = 3 if category == 'table' else 4
     elif mode == 'single':
@@ -56,7 +64,7 @@ def evaluate_model(model_path,
             gt_shape = tf.convert_to_tensor(scipy.io.loadmat(gt_shape_path)['data'], dtype=tf.float32)
             gt_shape = tf.expand_dims(gt_shape, 0)
             gt_shape = tf.expand_dims(gt_shape, 4)
-            pred_label = get_pred_label(my_model, gt_shape)
+            pred_label = get_pred_label(my_model, gt_shape, visualize_decoded_part, decoded_part_threshold, final_shape_threshold)
             pred_label = pred_label.numpy().astype('uint8')
             visualization.visualize(pred_label, title=shape)
 
@@ -70,15 +78,18 @@ def evaluate_model(model_path,
         gt_shape = tf.convert_to_tensor(scipy.io.loadmat(gt_shape_path)['data'], dtype=tf.float32)
         gt_shape = tf.expand_dims(gt_shape, 0)
         gt_shape = tf.expand_dims(gt_shape, 4)
-        pred_label = get_pred_label(my_model, gt_shape)
+        pred_label = get_pred_label(my_model, gt_shape, visualize_decoded_part, decoded_part_threshold, final_shape_threshold)
         pred_label = pred_label.numpy().astype('uint8')
         visualization.visualize(pred_label, title=shape_code)
 
 
-def get_pred_label(model, gt):
-    _, composer_output = model(gt)
-    pred = tf.squeeze(composer_output[1])
-    # pred = tf.squeeze(tf.where(model.composer.stacked_decoded_parts > 0.125, 1., 0.))
+def get_pred_label(model, gt, visualize_decoded_part=False, decoded_part_threshold=0.125, final_shape_threshold=0.5):
+
+    model(gt)
+    if visualize_decoded_part:
+        pred = tf.squeeze(tf.where(model.composer.stacked_decoded_parts > decoded_part_threshold, 1., 0.))
+    else:
+        pred = tf.squeeze(tf.where(model.composer.stn_output_fmap > final_shape_threshold, 1., 0.))
     code = 0
     for idx, each_part in enumerate(pred):
         code += each_part * 2 ** (idx + 1)
@@ -96,14 +107,29 @@ if __name__ == '__main__':
     parser.add_argument('-c', '--category', default='chair', help='which kind of shape to visualize. Default is chair')
     parser.add_argument('-n', '--num_to_visualize', default=4, help='the number of shape to be visualized. Only valid'
                                                                     'when \'mode\' is \'batch\'')
-    parser.add_argument('-s', '--single_shape_path', help='path of the shape to be visualized. e.g. '
+    parser.add_argument('-s', '--single_shape_path', default=None, help='path of the shape to be visualized. e.g. '
                                                           'datasets/03001627/1a6f615e8b1b5ae4dbbc9440457e303e. Only '
                                                           'valid when \'mode\' is \'single\'')
     parser.add_argument('-H', default=32, help='height of the shape voxel grid, Default is 32')
     parser.add_argument('-W', default=32, help='width of the shape voxel grid, Default is 32')
     parser.add_argument('-D', default=32, help='depth of the shape voxel grid, Default is 32')
     parser.add_argument('-C', default=1, help='channel of the shape voxel grid, Default is 1')
+    parser.add_argument('-v', '--visualize_decoded_part', default=False, help='whether to visualize decoded parts. '
+                                                                              'Default is False')
+    parser.add_argument('-d', '--decoded_part_threshold', default=0.125, help='threshold of decoded parts to be visualized. '
+                                                                              'Default is 0.125')
+    parser.add_argument('-f', '--final_shape_threshold', default=0.5, help='threshold of final shape to be visualized')
     args = parser.parse_args()
 
-    evaluate_model(args.model_path, args.mode, args.category, args.num_to_visualize, args.single_shape_path, args.H,
-                   args.W, args.D, args.C)
+    evaluate_model(model_path=args.model_path,
+                   mode=args.mode,
+                   category=args.category,
+                   num_to_visualize=int(args.num_to_visualize),
+                   single_shape_path=args.single_shape_path,
+                   H=int(args.H),
+                   W=int(args.W),
+                   D=int(args.D),
+                   C=int(args.C),
+                   visualize_decoded_part=bool(args.visualize_decoded_part),
+                   decoded_part_threshold=float(args.decoded_part_threshold),
+                   final_shape_threshold=float(args.final_shape_threshold))

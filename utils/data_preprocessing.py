@@ -212,4 +212,4 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    process_data(args.pcd_fp, args.binvox_fp, args.output_fp, args.resolution, args.k)
+    process_data(args.pcd_fp, args.binvox_fp, args.output_fp, int(args.resolution), int(args.k))
