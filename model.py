@@ -1,5 +1,6 @@
 import tensorflow as tf
 import numpy as np
+import time
 from tensorflow import keras
 from tensorflow.keras import layers
 
@@ -259,10 +260,10 @@ class Resampling(keras.layers.Layer):
         # reshape theta to (B, num_parts, 3, 4)
         theta = tf.reshape(theta, [B, num_parts, 3, 4])
 
-        # create regular 3D grid, which are the x, y, z coordinates of the output feature map
-        x = tf.linspace(-1.0, 1.0, W)
-        y = tf.linspace(-1.0, 1.0, H)
-        z = tf.linspace(-1.0, 1.0, D)
+        # create 3D grid, which are the x, y, z coordinates of the output feature map
+        x = tf.cast(tf.linspace(0, W-1, W), dtype=tf.uint8)
+        y = tf.cast(tf.linspace(0, H-1, H), dtype=tf.uint8)
+        z = tf.cast(tf.linspace(0, D-1, D), dtype=tf.uint8)
         x_t, y_t, z_t = tf.meshgrid(x, y, z)
 
         # flatten every x, y, z coordinates
@@ -272,7 +273,7 @@ class Resampling(keras.layers.Layer):
         # x_t_flat has shape (H*W*D,)
 
         # reshape to (x_t, y_t, z_t, 1), which is homogeneous form
-        ones = tf.ones_like(x_t_flat)
+        ones = tf.ones_like(x_t_flat, dtype=tf.uint8)
         sampling_grid = tf.stack([y_t_flat, x_t_flat, z_t_flat, ones])
         # sampling_grid now has shape (4, H*W*D)
 
@@ -305,61 +306,58 @@ class Resampling(keras.layers.Layer):
         :return: interpolated volume in the shape of (B, num_parts, H, W, D, C)
         """
 
-        H = tf.shape(input_fmap)[2]
-        W = tf.shape(input_fmap)[3]
-        D = tf.shape(input_fmap)[4]
-        C = tf.shape(input_fmap)[5]
-        max_x = tf.cast(W - 1, 'int32')
-        max_y = tf.cast(H - 1, 'int32')
-        max_z = tf.cast(D - 1, 'int32')
-        zero = tf.zeros([], dtype='int32')
-
-        # rescale x/y/z to [0, W-1/H-1/D-1]
-        x = 0.5 * ((x + 1.0) * tf.cast(max_x, 'float32'))
-        y = 0.5 * ((y + 1.0) * tf.cast(max_y, 'float32'))
-        z = 0.5 * ((z + 1.0) * tf.cast(max_z, 'float32'))
-
         # grab 8 nearest corner points for each (x_i, y_i, z_i) in input_fmap
         # 2*2*2 combination, so that there are 8 corner points in total
         x0 = tf.cast(tf.floor(x), 'int32')
-        x1 = x0 + 1
         y0 = tf.cast(tf.floor(y), 'int32')
-        y1 = y0 + 1
         z0 = tf.cast(tf.floor(z), 'int32')
-        z1 = z0 + 1
 
         # clip to range [0, H-1/W-1/D-1] to not violate boundaries
-        x0 = tf.clip_by_value(x0, zero, max_x)
-        x1 = tf.clip_by_value(x1, zero, max_x)
-        y0 = tf.clip_by_value(y0, zero, max_y)
-        y1 = tf.clip_by_value(y1, zero, max_y)
-        z0 = tf.clip_by_value(z0, zero, max_z)
-        z1 = tf.clip_by_value(z1, zero, max_z)
+        x_idx_l = tf.where(x0 < 0)
+        x_idx_h = tf.where(x0 >= 31)
+        y_idx_l = tf.where(y0 < 0)
+        y_idx_h = tf.where(y0 >= 31)
+        z_idx_l = tf.where(z0 < 0)
+        z_idx_h = tf.where(z0 >= 31)
+        x0 = x0.numpy()
+        y0 = y0.numpy()
+        z0 = z0.numpy()
+        idx_outsider = tf.concat([x_idx_l, y_idx_l, z_idx_l, x_idx_h, y_idx_h, z_idx_h], axis=0)
+        idx_outsider = tf.transpose(idx_outsider)
+        x0[idx_outsider[0], idx_outsider[1], idx_outsider[2], idx_outsider[3], idx_outsider[4]] = 0
+        y0[idx_outsider[0], idx_outsider[1], idx_outsider[2], idx_outsider[3], idx_outsider[4]] = 0
+        z0[idx_outsider[0], idx_outsider[1], idx_outsider[2], idx_outsider[3], idx_outsider[4]] = 0
+        x0 = tf.convert_to_tensor(x0)
+        y0 = tf.convert_to_tensor(y0)
+        z0 = tf.convert_to_tensor(z0)
+        x1 = x0 + 1
+        y1 = y0 + 1
+        z1 = z0 + 1
 
         # get voxel value of corner coordinates
-        # pay attention to the difference of the ordering between real world coordinates and voxel coordinates
         # reference: https://blog.csdn.net/webzhuce/article/details/86585489
-        c000 = self._get_voxel_value(input_fmap, x0, y1, z0)
-        c001 = self._get_voxel_value(input_fmap, x0, y1, z1)
-        c010 = self._get_voxel_value(input_fmap, x0, y0, z0)
-        c011 = self._get_voxel_value(input_fmap, x0, y0, z1)
-        c100 = self._get_voxel_value(input_fmap, x1, y1, z0)
-        c101 = self._get_voxel_value(input_fmap, x1, y1, z1)
-        c110 = self._get_voxel_value(input_fmap, x1, y0, z0)
-        c111 = self._get_voxel_value(input_fmap, x1, y0, z1)
+        c000 = self._get_voxel_value(input_fmap, x0, y0, z0)
+        c001 = self._get_voxel_value(input_fmap, x0, y0, z1)
+        c010 = self._get_voxel_value(input_fmap, x0, y1, z0)
+        c011 = self._get_voxel_value(input_fmap, x0, y1, z1)
+        c100 = self._get_voxel_value(input_fmap, x1, y0, z0)
+        c101 = self._get_voxel_value(input_fmap, x1, y0, z1)
+        c110 = self._get_voxel_value(input_fmap, x1, y1, z0)
+        c111 = self._get_voxel_value(input_fmap, x1, y1, z1)
         # cxxx has shape (B, num_parts, H, W, D, C)
 
         # recast as float for delta calculation
         x0 = tf.cast(x0, 'float32')
-        y1 = tf.cast(y1, 'float32')
+        y0 = tf.cast(y0, 'float32')
         z0 = tf.cast(z0, 'float32')
 
         # calculate deltas
         xd = x - x0
-        yd = y1 - y
+        yd = y - y0
         zd = z - z0
 
         # compute output (this is the  trilinear interpolation formula in real world coordinate system)
+        C = tf.shape(input_fmap)[5]
         xd = tf.expand_dims(xd, axis=5)
         yd = tf.expand_dims(yd, axis=5)
         zd = tf.expand_dims(zd, axis=5)
@@ -419,7 +417,7 @@ class Composer(keras.layers.Layer):
 
         # stacked_decoded_part should be in the shape of (B, num_parts, H, W, D, C)
         self.stacked_decoded_parts = tf.stack(decoder_outputs, axis=1)
-        binary_stacked_decoded_parts = tf.where(self.stacked_decoded_parts > 0., 1., 0.)
+        binary_stacked_decoded_parts = tf.where(self.stacked_decoded_parts > 0.125, 1., 0.)
         # summed_inputs should be in the shape of (B, encoding_dims)
         summed_inputs = tf.reduce_sum(inputs, axis=0)
         localization_inputs = (binary_stacked_decoded_parts, summed_inputs)
