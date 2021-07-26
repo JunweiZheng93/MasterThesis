@@ -118,7 +118,7 @@ if __name__ == '__main__':
                                                                               'Default is False')
     parser.add_argument('-d', '--decoded_part_threshold', default=0.125, help='threshold of decoded parts to be visualized. '
                                                                               'Default is 0.125')
-    parser.add_argument('-f', '--transformed_part_threshold', default=0.5, help='threshold of transformed parts to be visualized')
+    parser.add_argument('-t', '--transformed_part_threshold', default=0.5, help='threshold of transformed parts to be visualized')
     args = parser.parse_args()
 
     evaluate_model(model_path=args.model_path,

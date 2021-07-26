@@ -22,6 +22,7 @@ def train_model(category='chair',
                 decay_step_size=50,
                 decoded_part_threshold=0.125,
                 transformed_part_threshold=0.5,
+                direct_or_cycle='direct',
                 training_process='all',
                 epochs=(150, 100, 250),
                 model_path=None,
@@ -45,20 +46,20 @@ def train_model(category='chair',
             raise ValueError('epochs should be a tuple, whose elements inside are the epoch for training '
                              'process 1, 2 and 3 respectively.')
         # training process 1
-        _execute_training_process(my_model, training_set, test_set, epochs[0], shuffle, 1, optimizer, lr, decay_rate,
-                                  decay_step_size, RESULT_PATH)
+        _execute_training_process(my_model, training_set, test_set, epochs[0], shuffle, 1, direct_or_cycle, optimizer,
+                                  lr, decay_rate, decay_step_size, RESULT_PATH)
         # training process 2
-        _execute_training_process(my_model, training_set, test_set, epochs[1], shuffle, 2, optimizer, lr, decay_rate,
-                                  decay_step_size, RESULT_PATH)
+        _execute_training_process(my_model, training_set, test_set, epochs[1], shuffle, 2, direct_or_cycle, optimizer,
+                                  lr, decay_rate, decay_step_size, RESULT_PATH)
         # training process 3
-        _execute_training_process(my_model, training_set, test_set, epochs[2], shuffle, 3, optimizer, lr, decay_rate,
-                                  decay_step_size, RESULT_PATH)
+        _execute_training_process(my_model, training_set, test_set, epochs[2], shuffle, 3, direct_or_cycle, optimizer,
+                                  lr, decay_rate, decay_step_size, RESULT_PATH)
 
     elif training_process == 1 or training_process == '1':
         if type(epochs) == tuple or type(epochs) == list:
             raise ValueError(f'epochs should be an integer because you only choose process {training_process}')
-        _execute_training_process(my_model, training_set, test_set, epochs, shuffle, 1, optimizer, lr, decay_rate,
-                                  decay_step_size, RESULT_PATH)
+        _execute_training_process(my_model, training_set, test_set, epochs, shuffle, 1, direct_or_cycle, optimizer, lr,
+                                  decay_rate, decay_step_size, RESULT_PATH)
 
     elif training_process == 2 or training_process == '2':
         if type(epochs) == tuple or type(epochs) == list:
@@ -71,8 +72,8 @@ def train_model(category='chair',
         while True:
             if ans == 'y' or ans == 'Y' or ans == 'Yes' or ans == 'yes':
                 my_model.load_weights(model_path)
-                _execute_training_process(my_model, training_set, test_set, epochs, shuffle, 2, optimizer, lr,
-                                          decay_rate, decay_step_size, RESULT_PATH)
+                _execute_training_process(my_model, training_set, test_set, epochs, shuffle, 2, direct_or_cycle,
+                                          optimizer, lr, decay_rate, decay_step_size, RESULT_PATH)
                 break
             elif ans == 'n' or ans == 'N' or ans == 'No' or ans == 'no':
                 sys.exit()
@@ -90,8 +91,8 @@ def train_model(category='chair',
         while True:
             if ans == 'y' or ans == 'Y' or ans == 'Yes' or ans == 'yes':
                 my_model.load_weights(model_path)
-                _execute_training_process(my_model, training_set, test_set, epochs, shuffle, 3, optimizer, lr,
-                                          decay_rate, decay_step_size, RESULT_PATH)
+                _execute_training_process(my_model, training_set, test_set, epochs, shuffle, 3, direct_or_cycle,
+                                          optimizer, lr, decay_rate, decay_step_size, RESULT_PATH)
                 break
             elif ans == 'n' or ans == 'N' or ans == 'No' or ans == 'no':
                 sys.exit()
@@ -140,6 +141,7 @@ def _execute_training_process(my_model,
                               epochs,
                               shuffle,
                               process,
+                              direct_or_cycle,
                               optimizer,
                               lr,
                               decay_rate,
@@ -161,7 +163,7 @@ def _execute_training_process(my_model,
     lr_scheduler_callback = tf.keras.callbacks.LearningRateScheduler(lr_scheduler)
     callbacks = [checkpoint_callback, tensorboard_callback, lr_scheduler_callback]
     opt = _get_optimizer(optimizer, lr)
-    my_model.choose_training_process(training_process=process)
+    my_model.choose_training_process(training_process=process, mode=direct_or_cycle)
     my_model.compile(optimizer=opt, run_eagerly=True)
     my_model.fit(training_set, epochs=epochs, callbacks=callbacks, shuffle=shuffle)
 
@@ -191,6 +193,7 @@ if __name__ == '__main__':
                 decay_step_size=hparam['decay_step_size'],
                 decoded_part_threshold=hparam['decoded_part_binary_threshold'],
                 transformed_part_threshold=hparam['transformed_part_binary_threshold'],
+                direct_or_cycle=hparam['direct_or_cycle'],
                 training_process=hparam['training_process'],
                 epochs=hparam['epochs'],
                 model_path=hparam['model_path'],

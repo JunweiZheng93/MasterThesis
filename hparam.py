@@ -22,6 +22,8 @@ hparam = {
     'decay_step_size': 50,
     'decoded_part_binary_threshold': 0.125,  # threshold for the binary decoded part
     'transformed_part_binary_threshold': 0.5,  # threshold for the binary transformed part
+    'direct_or_cycle': 'direct',  # use shape reconstruction loss or cycle loss for training process 3 (only valid for
+                                 # training process 3
 
     # ---------------- other settings --------------------
 

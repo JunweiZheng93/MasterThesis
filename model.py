@@ -665,7 +665,7 @@ class Model(keras.Model):
                     trans_loss = self._cal_transformation_loss(trans,
                                                                tf.reshape(self.composer.stn.theta, (B, num_parts, 3, 4)))
                     shape_recon_loss = self._cal_shape_reconstruction_loss(x, tf.reduce_sum(self.composer.stn_output_fmap, axis=1))
-                    total_loss = 0.1 * pi_loss + 100 * part_recon_loss + 0.1 * trans_loss + 0.1 * shape_recon_loss
+                    total_loss = pi_loss + part_recon_loss + 100 * trans_loss + 0.01 * shape_recon_loss
 
                 grads = tape.gradient(total_loss, self.trainable_weights)
                 self.optimizer.apply_gradients(zip(grads, self.trainable_weights))
