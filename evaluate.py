@@ -22,7 +22,7 @@ def evaluate_model(model_path,
                    C=1,
                    visualize_decoded_part=False,
                    decoded_part_threshold=0.125,
-                   final_shape_threshold=0.5):
+                   transformed_part_threshold=0.5):
 
     # check category
     if category not in ['chair', 'table', 'airplane', 'lamp']:
@@ -64,7 +64,7 @@ def evaluate_model(model_path,
             gt_shape = tf.convert_to_tensor(scipy.io.loadmat(gt_shape_path)['data'], dtype=tf.float32)
             gt_shape = tf.expand_dims(gt_shape, 0)
             gt_shape = tf.expand_dims(gt_shape, 4)
-            pred_label = get_pred_label(my_model, gt_shape, visualize_decoded_part, decoded_part_threshold, final_shape_threshold)
+            pred_label = get_pred_label(my_model, gt_shape, visualize_decoded_part, decoded_part_threshold, transformed_part_threshold)
             pred_label = pred_label.numpy().astype('uint8')
             visualization.visualize(pred_label, title=shape)
 
@@ -78,18 +78,18 @@ def evaluate_model(model_path,
         gt_shape = tf.convert_to_tensor(scipy.io.loadmat(gt_shape_path)['data'], dtype=tf.float32)
         gt_shape = tf.expand_dims(gt_shape, 0)
         gt_shape = tf.expand_dims(gt_shape, 4)
-        pred_label = get_pred_label(my_model, gt_shape, visualize_decoded_part, decoded_part_threshold, final_shape_threshold)
+        pred_label = get_pred_label(my_model, gt_shape, visualize_decoded_part, decoded_part_threshold, transformed_part_threshold)
         pred_label = pred_label.numpy().astype('uint8')
         visualization.visualize(pred_label, title=shape_code)
 
 
-def get_pred_label(model, gt, visualize_decoded_part=False, decoded_part_threshold=0.125, final_shape_threshold=0.5):
+def get_pred_label(model, gt, visualize_decoded_part=False, decoded_part_threshold=0.125, transformed_part_threshold=0.5):
 
     model(gt)
     if visualize_decoded_part:
         pred = tf.squeeze(tf.where(model.composer.stacked_decoded_parts > decoded_part_threshold, 1., 0.))
     else:
-        pred = tf.squeeze(tf.where(model.composer.stn_output_fmap > final_shape_threshold, 1., 0.))
+        pred = tf.squeeze(tf.where(model.composer.stn_output_fmap > transformed_part_threshold, 1., 0.))
     code = 0
     for idx, each_part in enumerate(pred):
         code += each_part * 2 ** (idx + 1)
@@ -118,7 +118,7 @@ if __name__ == '__main__':
                                                                               'Default is False')
     parser.add_argument('-d', '--decoded_part_threshold', default=0.125, help='threshold of decoded parts to be visualized. '
                                                                               'Default is 0.125')
-    parser.add_argument('-f', '--final_shape_threshold', default=0.5, help='threshold of final shape to be visualized')
+    parser.add_argument('-f', '--transformed_part_threshold', default=0.5, help='threshold of transformed parts to be visualized')
     args = parser.parse_args()
 
     evaluate_model(model_path=args.model_path,
@@ -132,4 +132,4 @@ if __name__ == '__main__':
                    C=int(args.C),
                    visualize_decoded_part=bool(args.visualize_decoded_part),
                    decoded_part_threshold=float(args.decoded_part_threshold),
-                   final_shape_threshold=float(args.final_shape_threshold))
+                   transformed_part_threshold=float(args.transformed_part_threshold))

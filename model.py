@@ -1,6 +1,5 @@
 import tensorflow as tf
 import numpy as np
-import time
 from tensorflow import keras
 from tensorflow.keras import layers
 
@@ -405,10 +404,12 @@ class STN(keras.layers.Layer):
 
 class Composer(keras.layers.Layer):
 
-    def __init__(self, num_parts, **kwargs):
+    def __init__(self, num_parts, decoded_part_threshold=0.125, transformed_part_threshold=0.5, **kwargs):
         super(Composer, self).__init__(**kwargs)
         self.part_decoder = SharedPartDecoder()
         self.stn = STN(num_parts)
+        self.decoded_part_threshold = decoded_part_threshold
+        self.transformed_part_threshold = transformed_part_threshold
 
     def call(self, inputs, training=False):
         decoder_outputs = list()
@@ -417,39 +418,42 @@ class Composer(keras.layers.Layer):
 
         # stacked_decoded_part should be in the shape of (B, num_parts, H, W, D, C)
         self.stacked_decoded_parts = tf.stack(decoder_outputs, axis=1)
-        binary_stacked_decoded_parts = tf.where(self.stacked_decoded_parts > 0.125, 1., 0.)
+        binary_stacked_decoded_parts = tf.where(self.stacked_decoded_parts > self.decoded_part_threshold, 1., 0.)
         # summed_inputs should be in the shape of (B, encoding_dims)
         summed_inputs = tf.reduce_sum(inputs, axis=0)
         localization_inputs = (binary_stacked_decoded_parts, summed_inputs)
         # output_fmap has shape (B, num_parts, H, W, D, C)
-        output_fmap = self.stn(localization_inputs, training=training)
-        output_fmap = tf.where(output_fmap >= 0.5, 1., 0.)
+        self.stn_output_fmap = self.stn(localization_inputs, training=training)
+        output_fmap = tf.where(self.stn_output_fmap >= self.transformed_part_threshold, 1., 0.)
         # reconstructed model shape has the shape of (B, H, W, D, C)
         reconstructed_shape = tf.reduce_sum(output_fmap, axis=1)
         reconstructed_shape = tf.where(reconstructed_shape >= 1., 1., 0.)
 
-        return reconstructed_shape, output_fmap
+        return reconstructed_shape
 
 
 class Model(keras.Model):
 
-    def __init__(self, num_parts, **kwargs):
+    def __init__(self, num_parts, decoded_part_threshold=0.125, transformed_part_threshold=0.5, **kwargs):
         super(Model, self).__init__(**kwargs)
         self.num_parts = num_parts
         self.training_process = None
+        self.mode = None
 
         self.decomposer = Decomposer(num_parts)
-        self.composer = Composer(num_parts)
+        self.composer = Composer(num_parts, decoded_part_threshold, transformed_part_threshold)
 
         # create some loss tracker
         self.pi_loss_tracker = tf.keras.metrics.Mean()
         self.part_reconstruction_loss_tracker = tf.keras.metrics.Mean()
         self.transformation_loss_tracker = tf.keras.metrics.Mean()
         self.cycle_loss_tracker = tf.keras.metrics.Mean()
+        self.shape_reconstruction_loss_tracker = tf.keras.metrics.Mean()
         self.total_loss_tracker = tf.keras.metrics.Mean()
 
-    def choose_training_process(self, training_process):
+    def choose_training_process(self, training_process, mode='direct'):
         self.training_process = training_process
+        self.mode = mode
 
     def _cal_pi_loss(self):
         params = list()
@@ -472,6 +476,10 @@ class Model(keras.Model):
     @staticmethod
     def _cal_part_reconstruction_loss(gt, pred):
         return tf.reduce_mean(tf.reduce_sum(tf.keras.losses.binary_crossentropy(gt, pred), axis=(1, 2, 3, 4)))
+
+    @staticmethod
+    def _cal_shape_reconstruction_loss(gt, pred):
+        return tf.reduce_mean(tf.reduce_sum(tf.keras.losses.binary_crossentropy(gt, pred), axis=(1, 2, 3)))
 
     @staticmethod
     def _cal_transformation_loss(gt, pred):
@@ -534,20 +542,31 @@ class Model(keras.Model):
         elif self.training_process == 3:
             # decomposer output has shape (num_parts, B, encoding_dims)
             decomposer_output = self.decomposer(inputs, training=training)
-            if mode == 'mix':
-                num_parts, B, _ = decomposer_output.shape
-                # mixed order has shape (num_parts, B)
-                order = self._generate_mixed_order(num_parts, B)
-            elif mode == 'de_mix':
-                order = self._generate_de_mixed_order(mixed_order)
+            if self.mode == 'cycle':
+                if mode == 'mix':
+                    num_parts, B, _ = decomposer_output.shape
+                    # mixed order has shape (num_parts, B)
+                    order = self._generate_mixed_order(num_parts, B)
+                    # mixed decomposer output has shape (num_parts, B, encoding_dims)
+                    decomposer_output = self._mix(decomposer_output, order, mode='encoding')
+                elif mode == 'de_mix':
+                    order = self._generate_de_mixed_order(mixed_order)
+                    # de-mixed decomposer output has shape (num_parts, B, encoding_dims)
+                    decomposer_output = self._mix(decomposer_output, order, mode='encoding')
+                else:
+                    raise ValueError('mode should be one of mix and de_mix!')
+                # composer output has shape (B, H, W, D, C)
+                composer_output = self.composer(decomposer_output, training=training)
+                return decomposer_output, composer_output, order
+            elif self.mode == 'direct':
+                # composer output has shape (B, H, W, D, C)
+                composer_output = self.composer(decomposer_output, training=training)
+                return decomposer_output, composer_output
             else:
-                raise ValueError('mode should be one of mix and de_mix')
-            # mixed decomposer output has shape (num_parts, B, encoding_dims)
-            decomposer_output = self._mix(decomposer_output, order, mode='encoding')
-            # composer output is a tuple. The first element of the tuple has shape (B, H, W, D, C), the second one
-            # has shape (B, num_parts, H, W, D, C)
-            composer_output = self.composer(decomposer_output, training=training)
-            return decomposer_output, composer_output, order
+                raise ValueError('mode should be one of direct and cycle!')
+
+        else:
+            raise ValueError('Please choose training process. Valid value of training_process should be 1, 2 or 3.')
 
     def train_step(self, data):
 
@@ -589,52 +608,82 @@ class Model(keras.Model):
             return {'Transformation_Loss': self.transformation_loss_tracker.result()}
 
         elif self.training_process == 3:  # training process for fine tune all parameters using cycle loss
-            with tf.GradientTape() as tape:
-                # below is the first application:
-                decomposer_output, composer_output, mixed_order = self(x, training=True, mode='mix')
-                # mixed label has shape (B, num_parts, H, W, D, C)
-                mixed_label = self._mix(label, mixed_order, mode='label')
-                # mixed trans has shape (B, num_parts, 3, 4)
-                mixed_trans = self._mix(trans, mixed_order, mode='transformation')
-                # calculate PI loss
-                pi_loss1 = self._cal_pi_loss()
-                # calculate part reconstruction loss
-                part_recon_loss1 = self._cal_part_reconstruction_loss(mixed_label, self.composer.stacked_decoded_parts)
-                # calculate transformation loss
-                num_parts, B, _ = decomposer_output.shape
-                trans_loss1 = self._cal_transformation_loss(mixed_trans,
-                                                            tf.reshape(self.composer.stn.theta, (B, num_parts, 3, 4)))
+            if self.mode == 'cycle':
+                with tf.GradientTape() as tape:
+                    # below is the first application:
+                    decomposer_output, composer_output, mixed_order = self(x, training=True, mode='mix')
+                    # mixed label has shape (B, num_parts, H, W, D, C)
+                    mixed_label = self._mix(label, mixed_order, mode='label')
+                    # mixed trans has shape (B, num_parts, 3, 4)
+                    mixed_trans = self._mix(trans, mixed_order, mode='transformation')
+                    # calculate PI loss
+                    pi_loss1 = self._cal_pi_loss()
+                    # calculate part reconstruction loss
+                    part_recon_loss1 = self._cal_part_reconstruction_loss(mixed_label, self.composer.stacked_decoded_parts)
+                    # calculate transformation loss
+                    num_parts, B, _ = decomposer_output.shape
+                    trans_loss1 = self._cal_transformation_loss(mixed_trans,
+                                                                tf.reshape(self.composer.stn.theta, (B, num_parts, 3, 4)))
 
-                # below is the second application:
-                decomposer_output, composer_output, _ = self(composer_output[0], training=True, mode='de_mix', mixed_order=mixed_order)
-                de_mixed_label = label
-                de_mixed_trans = trans
-                pi_loss2 = self._cal_pi_loss()
-                part_recon_loss2 = self._cal_part_reconstruction_loss(de_mixed_label,
-                                                                      self.composer.stacked_decoded_parts)
-                trans_loss2 = self._cal_transformation_loss(de_mixed_trans,
-                                                            tf.reshape(self.composer.stn.theta, (B, num_parts, 3, 4)))
+                    # below is the second application:
+                    decomposer_output, composer_output, _ = self(composer_output, training=True, mode='de_mix', mixed_order=mixed_order)
+                    de_mixed_label = label
+                    de_mixed_trans = trans
+                    pi_loss2 = self._cal_pi_loss()
+                    part_recon_loss2 = self._cal_part_reconstruction_loss(de_mixed_label,
+                                                                          self.composer.stacked_decoded_parts)
+                    trans_loss2 = self._cal_transformation_loss(de_mixed_trans,
+                                                                tf.reshape(self.composer.stn.theta, (B, num_parts, 3, 4)))
 
-                pi_loss = pi_loss1 + pi_loss2
-                part_recon_loss = part_recon_loss1 + part_recon_loss2
-                trans_loss = trans_loss1 + trans_loss2
-                cycle_loss = self._cal_cycle_loss(x, composer_output[0])
-                total_loss = 0.1 * pi_loss + 100 * part_recon_loss + 0.1 * trans_loss + 0.1 * cycle_loss
+                    pi_loss = pi_loss1 + pi_loss2
+                    part_recon_loss = part_recon_loss1 + part_recon_loss2
+                    trans_loss = trans_loss1 + trans_loss2
+                    cycle_loss = self._cal_cycle_loss(x, composer_output)
+                    total_loss = 0.1 * pi_loss + 100 * part_recon_loss + 0.1 * trans_loss + 0.1 * cycle_loss
 
-            grads = tape.gradient(total_loss, self.trainable_weights)
-            self.optimizer.apply_gradients(zip(grads, self.trainable_weights))
+                grads = tape.gradient(total_loss, self.trainable_weights)
+                self.optimizer.apply_gradients(zip(grads, self.trainable_weights))
 
-            self.pi_loss_tracker.update_state(pi_loss)
-            self.part_reconstruction_loss_tracker.update_state(part_recon_loss)
-            self.transformation_loss_tracker.update_state(trans_loss)
-            self.cycle_loss_tracker.update_state(cycle_loss)
-            self.total_loss_tracker.update_state(total_loss)
+                self.pi_loss_tracker.update_state(pi_loss)
+                self.part_reconstruction_loss_tracker.update_state(part_recon_loss)
+                self.transformation_loss_tracker.update_state(trans_loss)
+                self.cycle_loss_tracker.update_state(cycle_loss)
+                self.total_loss_tracker.update_state(total_loss)
 
-            return {'PI_Loss': self.pi_loss_tracker.result(),
-                    'Part_Recon_Loss': self.part_reconstruction_loss_tracker.result(),
-                    'Transformation_Loss': self.transformation_loss_tracker.result(),
-                    'Cycle_Loss': self.cycle_loss_tracker.result(),
-                    'Total_Loss': self.total_loss_tracker.result()}
+                return {'PI_Loss': self.pi_loss_tracker.result(),
+                        'Part_Recon_Loss': self.part_reconstruction_loss_tracker.result(),
+                        'Transformation_Loss': self.transformation_loss_tracker.result(),
+                        'Cycle_Loss': self.cycle_loss_tracker.result(),
+                        'Total_Loss': self.total_loss_tracker.result()}
+
+            elif self.mode == 'direct':
+                with tf.GradientTape() as tape:
+                    decomposer_output, composer_output = self(x, training=True)
+                    num_parts, B, _ = decomposer_output.shape
+                    pi_loss = self._cal_pi_loss()
+                    part_recon_loss = self._cal_part_reconstruction_loss(label, self.composer.stacked_decoded_parts)
+                    trans_loss = self._cal_transformation_loss(trans,
+                                                               tf.reshape(self.composer.stn.theta, (B, num_parts, 3, 4)))
+                    shape_recon_loss = self._cal_shape_reconstruction_loss(x, tf.reduce_sum(self.composer.stn_output_fmap, axis=1))
+                    total_loss = 0.1 * pi_loss + 100 * part_recon_loss + 0.1 * trans_loss + 0.1 * shape_recon_loss
+
+                grads = tape.gradient(total_loss, self.trainable_weights)
+                self.optimizer.apply_gradients(zip(grads, self.trainable_weights))
+
+                self.pi_loss_tracker.update_state(pi_loss)
+                self.part_reconstruction_loss_tracker.update_state(part_recon_loss)
+                self.transformation_loss_tracker.update_state(trans_loss)
+                self.shape_reconstruction_loss_tracker.update_state(shape_recon_loss)
+                self.total_loss_tracker.update_state(total_loss)
+
+                return {'PI_Loss': self.pi_loss_tracker.result(),
+                        'Part_Recon_Loss': self.part_reconstruction_loss_tracker.result(),
+                        'Transformation_Loss': self.transformation_loss_tracker.result(),
+                        'Shape_Recon_Loss': self.shape_reconstruction_loss_tracker.result(),
+                        'Total_Loss': self.total_loss_tracker.result()}
+
+            else:
+                raise ValueError('mode should be one of direct and cycle!')
 
         else:
             raise ValueError('Please choose training process. Valid value of training_process should be 1, 2 or 3.')

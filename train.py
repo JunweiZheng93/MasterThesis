@@ -20,6 +20,8 @@ def train_model(category='chair',
                 lr=0.001,
                 decay_rate=0.8,
                 decay_step_size=50,
+                decoded_part_threshold=0.125,
+                transformed_part_threshold=0.5,
                 training_process='all',
                 epochs=(150, 100, 250),
                 model_path=None,
@@ -36,7 +38,7 @@ def train_model(category='chair',
     training_set, test_set = dataloader.get_dataset(category=category, batch_size=batch_size, split_ratio=split_ratio,
                                                     max_num_parts=max_num_parts)
     # create model
-    my_model = model.Model(num_parts=max_num_parts)
+    my_model = model.Model(max_num_parts, decoded_part_threshold, transformed_part_threshold)
 
     if training_process == 'all':
         if type(epochs) != tuple:
@@ -64,7 +66,8 @@ def train_model(category='chair',
         warm_up_data = training_set.__iter__().__next__()[0]
         my_model.choose_training_process(2)
         my_model(warm_up_data)
-        ans = input('Please make sure the model_path is the path of model AFTER training process 1! Continue? y/n: ')
+        ans = input(f'Please make sure the model_path is the path of model AFTER training process 1! Your model_path is '
+                    f'"{model_path}". Continue? y/n: ')
         while True:
             if ans == 'y' or ans == 'Y' or ans == 'Yes' or ans == 'yes':
                 my_model.load_weights(model_path)
@@ -82,7 +85,8 @@ def train_model(category='chair',
         warm_up_data = training_set.__iter__().__next__()[0]
         my_model.choose_training_process(3)
         my_model(warm_up_data)
-        ans = input('Please make sure the model_path is the path of model AFTER training process 2! Continue? y/n: ')
+        ans = input(f'Please make sure the model_path is the path of model AFTER training process 2! Your model_path is '
+                    f'"{model_path}". Continue? y/n: ')
         while True:
             if ans == 'y' or ans == 'Y' or ans == 'Yes' or ans == 'yes':
                 my_model.load_weights(model_path)
@@ -185,6 +189,8 @@ if __name__ == '__main__':
                 lr=hparam['lr'],
                 decay_rate=hparam['decay_rate'],
                 decay_step_size=hparam['decay_step_size'],
+                decoded_part_threshold=hparam['decoded_part_binary_threshold'],
+                transformed_part_threshold=hparam['transformed_part_binary_threshold'],
                 training_process=hparam['training_process'],
                 epochs=hparam['epochs'],
                 model_path=hparam['model_path'],
