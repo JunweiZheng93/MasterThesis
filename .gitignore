@@ -30,3 +30,6 @@ ipython_config.py
 
 # Dataset
 datasets/
+
+# Result
+results/
