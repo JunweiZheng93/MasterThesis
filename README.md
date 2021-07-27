@@ -23,8 +23,8 @@ To set up python virtual environment: <br>
 Follow the [installation instruction of MiniConda](https://docs.conda.io/en/latest/miniconda.html#) and then run 
 the following snippet using your favourite terminal application:
 ```bash
-conda create -n py37 python=3.7
-conda activate py37
+conda create -n py36 python=3.6
+conda activate py36
 ```
 
 To install all necessary packages:
@@ -54,7 +54,7 @@ voxelize ShapeNetCore using binvox by yourself instead of downloading ShapeVox32
 following snippet in your favourite terminal application:
 ```bash
 cd path_of_the_project_root
-PYTHONPATH=path_of_project_root python utils/data_preprocessing.py path_of_pcd_category path_of_binvox_category output_path
+python utils/data_preprocessing.py path_of_pcd_category path_of_binvox_category output_path
 ```
 For example, `./shapenetcore_partanno_segmentation_benchmark_v0/03001627/` is the pcd path of the category `chair`. 
 `./ShapeNetVox32/03001627/` is the binvox path of the category `chair`. Output path is the path where you want to save the 
@@ -62,7 +62,7 @@ generated data.
 
 For more usage about `data_preprocessing.py`, please run:
 ```bash
-PYTHONPATH=path_of_project_root python utils/data_preprocessing.py -h
+python utils/data_preprocessing.py -h
 ```
 
 ### Using our dataset
@@ -88,7 +88,7 @@ maximal number of parts: 4
 The generated dataset consists of some PNG images and `.mat` files. To visualize `.mat` files, please run:
 ```bash
 cd path_of_the_project_root
-PYTHONPATH=path_of_project_root python utils/visualization.py path_of_mat_file
+python utils/visualization.py path_of_mat_file
 ```
 
 ## Training
@@ -97,7 +97,7 @@ Our training script is user-friendly. The only thing you need to do is to open y
 type:
 ```bash
 cd path_of_the_project_root
-PYTHONPATH=path_of_project_root python train.py 
+python train.py 
 ```
 Firstly, the training script will ask you if you want to take some notes for the training. If yes, it will open `vim`
 and you can start typing. After finish typing, use `:wq` to exit `vim` (check how to use `vim`) and the note will be save automatically. 
@@ -119,12 +119,12 @@ shape for shape #2. The process will go on until shape #4.
 To run batch mode, please type:
 ```bash
 cd path_of_the_project_root
-PYTHONPATH=path_of_project_root python evaluate.py model_path --category the_category_you_want_to_choose
+python evaluate.py model_path --category the_category_you_want_to_choose
 ```
 For example, if you want to evaluate how good you model is for the category `chair` (assume your model is saved in 
 `project_root/results/20210723162046/process_3/checkpoint.h5`), you need to type:
 ```bash
-PYTHONPATH=path_of_project_root python evaluate.py project_root/results/20210723162046/process_3/checkpoint.h5
+python evaluate.py project_root/results/20210723162046/process_3/checkpoint.h5
 ```
 `chair` is the default category. so you don't need to set value for `--category`.
 
@@ -134,10 +134,10 @@ Single mode allows you to check the evaluation result for one specific shape. Fo
 good you model is for the shape `03001627/1a38407b3036795d19fb4103277a6b93`(it is a shape in catergory `chair`)
 and assume your model is saved in `project_root/results/20210723162046/process_3/checkpoint.h5`, you should type:
 ```bash
-PYTHONPATH=path_of_project_root python evaluate.py project_root/results/20210723162046/process_3/checkpoint.h5 --mode single
+python evaluate.py project_root/results/20210723162046/process_3/checkpoint.h5 --mode single
 --single_shape_path datasets/03001627/1a38407b3036795d19fb4103277a6b93/
 ```
 For more usage of `evaluate.py`, please type:
 ```bash
-PYTHONPATH=path_of_project_root python evaluate.py -h
+python evaluate.py -h
 ```

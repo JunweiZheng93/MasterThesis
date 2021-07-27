@@ -84,9 +84,14 @@ class Decomposer(keras.layers.Layer):
         x = self.binary_shape_encoder(inputs, training=training)
         for each_layer in self.projection_layer_list:
             projection_layer_outputs.append(each_layer(x))
-        # outputs should be in the shape of (num_parts, B, encoding_dimensions)
-        outputs = tf.convert_to_tensor(projection_layer_outputs)
+        # outputs should be in the shape of (B, num_parts, encoding_dimensions)
+        outputs = tf.transpose(projection_layer_outputs, (1, 0, 2))
         return outputs
+
+
+class Attention(keras.layers.Layer):
+    def __init__(self, **kwargs):
+        pass
 
 
 class SharedPartDecoder(keras.layers.Layer):
@@ -212,8 +217,9 @@ class LocalizationNet(keras.layers.Layer):
         final_x = self.final_dropout1(final_x, training=training)
         final_x = self.final_fc2(final_x)
 
-        # the shape of final_x should be (B, num_parts*12)
-        return final_x
+        # the shape of outputs should be (B, num_parts, 3, 4)
+        outputs = tf.reshape(final_x, (stacked_inputs.shape[0], stacked_inputs.shape[1], 3, 4))
+        return outputs
 
 
 class Resampling(keras.layers.Layer):
@@ -224,7 +230,7 @@ class Resampling(keras.layers.Layer):
     def call(self, inputs):
 
         # input_fmap has shape (B, num_parts, H, W, D, C)
-        # theta has shape (B, num_parts*12)
+        # theta has shape (B, num_parts, 3, 4)
         input_fmap = inputs[0]
         theta = inputs[1]
 
@@ -245,7 +251,7 @@ class Resampling(keras.layers.Layer):
     def _affine_grid_generator(input_fmap, theta):
         """
         :param input_fmap: the stacked decoded parts in the shape of (B, num_parts, H, W, D, C)
-        :param theta: the output of LocalizationNet. has shape (B, num_parts*12)
+        :param theta: the output of LocalizationNet. has shape (B, num_parts, 3, 4)
         :return: affine grid for the input feature map. affine grid has shape (B, num_parts, 3, H, W, D)
         """
 
@@ -255,9 +261,6 @@ class Resampling(keras.layers.Layer):
         H = tf.shape(input_fmap)[2]
         W = tf.shape(input_fmap)[3]
         D = tf.shape(input_fmap)[4]
-
-        # reshape theta to (B, num_parts, 3, 4)
-        theta = tf.reshape(theta, [B, num_parts, 3, 4])
 
         # create 3D grid, which are the x, y, z coordinates of the output feature map
         x = tf.cast(tf.linspace(0, W-1, W), dtype=tf.uint8)
@@ -413,21 +416,21 @@ class Composer(keras.layers.Layer):
 
     def call(self, inputs, training=False):
         decoder_outputs = list()
-        for each in inputs:
+        decoder_inputs = tf.transpose(inputs, (1, 0, 2))
+        for each in decoder_inputs:
             decoder_outputs.append(self.part_decoder(each, training=training))
 
         # stacked_decoded_part should be in the shape of (B, num_parts, H, W, D, C)
         self.stacked_decoded_parts = tf.stack(decoder_outputs, axis=1)
         binary_stacked_decoded_parts = tf.where(self.stacked_decoded_parts > self.decoded_part_threshold, 1., 0.)
         # summed_inputs should be in the shape of (B, encoding_dims)
-        summed_inputs = tf.reduce_sum(inputs, axis=0)
+        summed_inputs = tf.reduce_sum(inputs, axis=1)
         localization_inputs = (binary_stacked_decoded_parts, summed_inputs)
-        # output_fmap has shape (B, num_parts, H, W, D, C)
+        # binary_output_fmap has shape (B, num_parts, H, W, D, C)
         self.stn_output_fmap = self.stn(localization_inputs, training=training)
-        output_fmap = tf.where(self.stn_output_fmap >= self.transformed_part_threshold, 1., 0.)
+        binary_output_fmap = tf.where(self.stn_output_fmap >= self.transformed_part_threshold, 1., 0.)
         # reconstructed model shape has the shape of (B, H, W, D, C)
-        reconstructed_shape = tf.reduce_sum(output_fmap, axis=1)
-        reconstructed_shape = tf.where(reconstructed_shape >= 1., 1., 0.)
+        reconstructed_shape = tf.where(tf.reduce_sum(binary_output_fmap, axis=1) >= 1., 1., 0.)
 
         return reconstructed_shape
 
@@ -494,74 +497,69 @@ class Model(keras.Model):
         mixed_order_list = list()
         for i in range(num_parts):
             mixed_order_list.append(tf.convert_to_tensor(np.random.choice(batch_size, batch_size, False)))
-        return tf.convert_to_tensor(mixed_order_list)
+        return tf.transpose(mixed_order_list, (1, 0))
 
     @staticmethod
     def _generate_de_mixed_order(mixed_order):
-        return tf.argsort(mixed_order, axis=1)
+        mixed_order = tf.transpose(mixed_order, (1, 0))
+        de_mixed_order = tf.argsort(mixed_order, axis=1)
+        de_mixed_order = tf.transpose(de_mixed_order, (1, 0))
+        return de_mixed_order
 
     @staticmethod
     def _mix(inputs, mixed_order, mode):
         mixed_list = list()
+        mixed_order = tf.transpose(mixed_order, (1, 0))
+
         if mode == 'label':
             inputs = tf.transpose(inputs, [1, 0, 2, 3, 4, 5])
-            for each_input, each_order in zip(inputs, mixed_order):
-                mixed_list.append(tf.gather(each_input, each_order, axis=0))
-            mixed_output = tf.stack(mixed_list, axis=1)
         elif mode == 'encoding':
-            for each_input, each_order in zip(inputs, mixed_order):
-                mixed_list.append(tf.gather(each_input, each_order, axis=0))
-            mixed_output = tf.convert_to_tensor(mixed_list)
+            inputs = tf.transpose(inputs, [1, 0, 2])
         elif mode == 'transformation':
             inputs = tf.transpose(inputs, [1, 0, 2, 3])
-            for each_input, each_order in zip(inputs, mixed_order):
-                mixed_list.append(tf.gather(each_input, each_order, axis=0))
-            mixed_output = tf.stack(mixed_list, axis=1)
         else:
             raise ValueError('\'mode\' should be \'label\', \'encoding\' or \'transformation\'.')
+
+        for each_input, each_order in zip(inputs, mixed_order):
+            mixed_list.append(tf.gather(each_input, each_order, axis=0))
+        mixed_output = tf.stack(mixed_list, axis=1)
+
         return mixed_output
 
     def call(self, inputs, training=False, mode='mix', mixed_order=None):
 
-        if self.training_process == 1:
-            # decomposer output has shape (num_parts, B, encoding_dims)
+        if self.training_process == 1 or self.training_process == 2:
+            # decomposer output has shape (B, num_parts, encoding_dims)
             decomposer_output = self.decomposer(inputs, training=training)
-            # composer output is a tuple. The first element of the tuple has shape (B, H, W, D, C), the second one
-            # has shape (B, num_parts, H, W, D, C)
+            # composer output has shape (B, H, W, D, C)
             composer_output = self.composer(decomposer_output, training=training)
-            return decomposer_output, composer_output
-
-        elif self.training_process == 2:
-            # decomposer output has shape (num_parts, B, encoding_dims)
-            decomposer_output = self.decomposer(inputs, training=training)
-            # composer output is a tuple. The first element of the tuple has shape (B, H, W, D, C), the second one
-            # has shape (B, num_parts, H, W, D, C)
-            composer_output = self.composer(decomposer_output, training=training)
-            return decomposer_output, composer_output
+            return composer_output
 
         elif self.training_process == 3:
-            # decomposer output has shape (num_parts, B, encoding_dims)
+            # decomposer output has shape (B, num_parts, encoding_dims)
             decomposer_output = self.decomposer(inputs, training=training)
             if self.mode == 'cycle':
                 if mode == 'mix':
-                    num_parts, B, _ = decomposer_output.shape
-                    # mixed order has shape (num_parts, B)
-                    order = self._generate_mixed_order(num_parts, B)
-                    # mixed decomposer output has shape (num_parts, B, encoding_dims)
+                    # mixed order has shape (B, num_parts)
+                    order = self._generate_mixed_order(self.num_parts, inputs.shape[0])
+                    # mixed decomposer output has shape (B, num_parts, encoding_dims)
                     decomposer_output = self._mix(decomposer_output, order, mode='encoding')
                 elif mode == 'de_mix':
+                    # de-mixed order has shape (B, num_parts)
                     order = self._generate_de_mixed_order(mixed_order)
-                    # de-mixed decomposer output has shape (num_parts, B, encoding_dims)
+                    # de-mixed decomposer output has shape (B, num_parts, encoding_dims)
                     decomposer_output = self._mix(decomposer_output, order, mode='encoding')
                 else:
                     raise ValueError('mode should be one of mix and de_mix!')
                 # composer output has shape (B, H, W, D, C)
                 composer_output = self.composer(decomposer_output, training=training)
-                return decomposer_output, composer_output, order
+                return composer_output, order
+
             elif self.mode == 'direct':
                 # composer output has shape (B, H, W, D, C)
                 composer_output = self.composer(decomposer_output, training=training)
-                return decomposer_output, composer_output
+                return composer_output
+
             else:
                 raise ValueError('mode should be one of direct and cycle!')
 
@@ -575,7 +573,7 @@ class Model(keras.Model):
 
         if self.training_process == 1:  # training process for pretraining BinaryShapeEncoder, Projection, PartDecoder
             with tf.GradientTape() as tape:
-                decomposer_output, composer_output = self(x, training=True)
+                composer_output = self(x, training=True)
                 pi_loss = self._cal_pi_loss()
                 part_recon_loss = self._cal_part_reconstruction_loss(label, self.composer.stacked_decoded_parts)
                 total_loss = pi_loss + part_recon_loss
@@ -595,10 +593,8 @@ class Model(keras.Model):
 
         elif self.training_process == 2:  # training process for pretraining STN
             with tf.GradientTape() as tape:
-                decomposer_output, composer_output = self(x, training=True)
-                num_parts, B, _ = decomposer_output.shape
-                trans_loss = self._cal_transformation_loss(trans,
-                                                           tf.reshape(self.composer.stn.theta, (B, num_parts, 3, 4)))
+                composer_output = self(x, training=True)
+                trans_loss = self._cal_transformation_loss(trans, self.composer.stn.theta)
 
             grads = tape.gradient(trans_loss, self.composer.stn.localizationnet.trainable_weights)
             self.optimizer.apply_gradients(zip(grads, self.composer.stn.localizationnet.trainable_weights))
@@ -611,29 +607,20 @@ class Model(keras.Model):
             if self.mode == 'cycle':
                 with tf.GradientTape() as tape:
                     # below is the first application:
-                    decomposer_output, composer_output, mixed_order = self(x, training=True, mode='mix')
-                    # mixed label has shape (B, num_parts, H, W, D, C)
+                    composer_output, mixed_order = self(x, training=True, mode='mix')
                     mixed_label = self._mix(label, mixed_order, mode='label')
-                    # mixed trans has shape (B, num_parts, 3, 4)
                     mixed_trans = self._mix(trans, mixed_order, mode='transformation')
-                    # calculate PI loss
                     pi_loss1 = self._cal_pi_loss()
-                    # calculate part reconstruction loss
                     part_recon_loss1 = self._cal_part_reconstruction_loss(mixed_label, self.composer.stacked_decoded_parts)
-                    # calculate transformation loss
-                    num_parts, B, _ = decomposer_output.shape
-                    trans_loss1 = self._cal_transformation_loss(mixed_trans,
-                                                                tf.reshape(self.composer.stn.theta, (B, num_parts, 3, 4)))
+                    trans_loss1 = self._cal_transformation_loss(mixed_trans, self.composer.stn.theta)
 
                     # below is the second application:
-                    decomposer_output, composer_output, _ = self(composer_output, training=True, mode='de_mix', mixed_order=mixed_order)
+                    composer_output, _ = self(composer_output, training=True, mode='de_mix', mixed_order=mixed_order)
                     de_mixed_label = label
                     de_mixed_trans = trans
                     pi_loss2 = self._cal_pi_loss()
-                    part_recon_loss2 = self._cal_part_reconstruction_loss(de_mixed_label,
-                                                                          self.composer.stacked_decoded_parts)
-                    trans_loss2 = self._cal_transformation_loss(de_mixed_trans,
-                                                                tf.reshape(self.composer.stn.theta, (B, num_parts, 3, 4)))
+                    part_recon_loss2 = self._cal_part_reconstruction_loss(de_mixed_label, self.composer.stacked_decoded_parts)
+                    trans_loss2 = self._cal_transformation_loss(de_mixed_trans, self.composer.stn.theta)
 
                     pi_loss = pi_loss1 + pi_loss2
                     part_recon_loss = part_recon_loss1 + part_recon_loss2
@@ -658,12 +645,10 @@ class Model(keras.Model):
 
             elif self.mode == 'direct':
                 with tf.GradientTape() as tape:
-                    decomposer_output, composer_output = self(x, training=True)
-                    num_parts, B, _ = decomposer_output.shape
+                    composer_output = self(x, training=True)
                     pi_loss = self._cal_pi_loss()
                     part_recon_loss = self._cal_part_reconstruction_loss(label, self.composer.stacked_decoded_parts)
-                    trans_loss = self._cal_transformation_loss(trans,
-                                                               tf.reshape(self.composer.stn.theta, (B, num_parts, 3, 4)))
+                    trans_loss = self._cal_transformation_loss(trans, self.composer.stn.theta)
                     shape_recon_loss = self._cal_shape_reconstruction_loss(x, tf.reduce_sum(self.composer.stn_output_fmap, axis=1))
                     total_loss = pi_loss + part_recon_loss + 100 * trans_loss + 0.01 * shape_recon_loss
 
@@ -691,4 +676,4 @@ class Model(keras.Model):
     @property
     def metrics(self):
         return [self.pi_loss_tracker, self.part_reconstruction_loss_tracker, self.transformation_loss_tracker,
-                self.cycle_loss_tracker, self.total_loss_tracker]
+                self.cycle_loss_tracker, self.shape_reconstruction_loss_tracker, self.total_loss_tracker]

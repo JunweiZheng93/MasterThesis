@@ -69,12 +69,12 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='This is the script for visualizing .mat files')
 
     parser.add_argument('mat_fp', help='file path of the mat file')
-    parser.add_argument('--show_axis', default=False, help='show coordinate axis. default False')
-    parser.add_argument('--show_grid', default=False, help='show coordinate grid. default False')
+    parser.add_argument('--show_axis', action='store_true', help='show coordinate axis')
+    parser.add_argument('--show_grid', action='store_true', help='show coordinate grid')
     parser.add_argument('--cmap', default='Set2', help='color map for the visualization. default Set2')
 
     args = parser.parse_args()
 
     data = scipy.io.loadmat(args.mat_fp)
     x = data['data']
-    visualize(x, show_axis=bool(args.show_axis), show_grid=bool(args.show_grid), cmap=args.cmap)
+    visualize(x, show_axis=args.show_axis, show_grid=args.show_grid, cmap=args.cmap)

@@ -64,9 +64,15 @@ def evaluate_model(model_path,
             gt_shape = tf.convert_to_tensor(scipy.io.loadmat(gt_shape_path)['data'], dtype=tf.float32)
             gt_shape = tf.expand_dims(gt_shape, 0)
             gt_shape = tf.expand_dims(gt_shape, 4)
-            pred_label = get_pred_label(my_model, gt_shape, visualize_decoded_part, decoded_part_threshold, transformed_part_threshold)
-            pred_label = pred_label.numpy().astype('uint8')
-            visualization.visualize(pred_label, title=shape)
+            if visualize_decoded_part:
+                pred = get_pred_label(my_model, gt_shape, visualize_decoded_part, decoded_part_threshold, transformed_part_threshold)
+                pred = pred.numpy().astype('uint8')
+                for part in pred:
+                    visualization.visualize(part, title=shape)
+            else:
+                pred_label = get_pred_label(my_model, gt_shape, visualize_decoded_part, decoded_part_threshold, transformed_part_threshold)
+                pred_label = pred_label.numpy().astype('uint8')
+                visualization.visualize(pred_label, title=shape)
 
     else:
 
@@ -78,23 +84,40 @@ def evaluate_model(model_path,
         gt_shape = tf.convert_to_tensor(scipy.io.loadmat(gt_shape_path)['data'], dtype=tf.float32)
         gt_shape = tf.expand_dims(gt_shape, 0)
         gt_shape = tf.expand_dims(gt_shape, 4)
-        pred_label = get_pred_label(my_model, gt_shape, visualize_decoded_part, decoded_part_threshold, transformed_part_threshold)
-        pred_label = pred_label.numpy().astype('uint8')
-        visualization.visualize(pred_label, title=shape_code)
+        if visualize_decoded_part:
+            pred = get_pred_label(my_model, gt_shape, visualize_decoded_part, decoded_part_threshold, transformed_part_threshold)
+            pred = pred.numpy().astype('uint8')
+            for part in pred:
+                visualization.visualize(part, title=shape_code)
+        else:
+            pred_label = get_pred_label(my_model, gt_shape, visualize_decoded_part, decoded_part_threshold, transformed_part_threshold)
+            pred_label = pred_label.numpy().astype('uint8')
+            visualization.visualize(pred_label, title=shape_code)
 
 
 def get_pred_label(model, gt, visualize_decoded_part=False, decoded_part_threshold=0.125, transformed_part_threshold=0.5):
+    """
+    :param model: tensorflow model
+    :param gt: ground truth binary voxel_grid tensor. It has shape (1, H, W, D, C)
+    :param visualize_decoded_part: whether to visualize decoded parts
+    :param decoded_part_threshold: threshold for decoded parts to be visualized
+    :param transformed_part_threshold: threshold for transformed parts to be visualized
+    """
 
     model(gt)
+
     if visualize_decoded_part:
         pred = tf.squeeze(tf.where(model.composer.stacked_decoded_parts > decoded_part_threshold, 1., 0.))
+        return pred
     else:
         pred = tf.squeeze(tf.where(model.composer.stn_output_fmap > transformed_part_threshold, 1., 0.))
-    code = 0
-    for idx, each_part in enumerate(pred):
-        code += each_part * 2 ** (idx + 1)
-    pred_label = tf.math.floor(tf.experimental.numpy.log2(code+1))
-    return pred_label
+
+        code = 0
+        for idx, each_part in enumerate(pred):
+            code += each_part * 2 ** (idx + 1)
+        pred_label = tf.math.floor(tf.experimental.numpy.log2(code+1))
+
+        return pred_label
 
 
 if __name__ == '__main__':
@@ -114,8 +137,7 @@ if __name__ == '__main__':
     parser.add_argument('-W', default=32, help='width of the shape voxel grid, Default is 32')
     parser.add_argument('-D', default=32, help='depth of the shape voxel grid, Default is 32')
     parser.add_argument('-C', default=1, help='channel of the shape voxel grid, Default is 1')
-    parser.add_argument('-v', '--visualize_decoded_part', default=False, help='whether to visualize decoded parts. '
-                                                                              'Default is False')
+    parser.add_argument('-v', '--visualize_decoded_part', action="store_true", help='whether to visualize decoded parts')
     parser.add_argument('-d', '--decoded_part_threshold', default=0.125, help='threshold of decoded parts to be visualized. '
                                                                               'Default is 0.125')
     parser.add_argument('-t', '--transformed_part_threshold', default=0.5, help='threshold of transformed parts to be visualized')
@@ -130,6 +152,6 @@ if __name__ == '__main__':
                    W=int(args.W),
                    D=int(args.D),
                    C=int(args.C),
-                   visualize_decoded_part=bool(args.visualize_decoded_part),
+                   visualize_decoded_part=args.visualize_decoded_part,
                    decoded_part_threshold=float(args.decoded_part_threshold),
                    transformed_part_threshold=float(args.transformed_part_threshold))

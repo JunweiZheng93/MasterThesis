@@ -34,24 +34,25 @@ class TestModel(TestCase):
     def test_Resampling(self):
 
         my_model = model.Model(4)
-        part1 = scipy.io.loadmat('datasets/chair_voxel/1c3f1a9cea91359c4c3e19c2c67c262f/part1.mat')['data'][:, :, :, np.newaxis]
-        part2 = scipy.io.loadmat('datasets/chair_voxel/1c3f1a9cea91359c4c3e19c2c67c262f/part2.mat')['data'][:, :, :, np.newaxis]
-        part3 = scipy.io.loadmat('datasets/chair_voxel/1c3f1a9cea91359c4c3e19c2c67c262f/part3.mat')['data'][:, :, :, np.newaxis]
-        part4 = scipy.io.loadmat('datasets/chair_voxel/1c3f1a9cea91359c4c3e19c2c67c262f/part4.mat')['data'][:, :, :, np.newaxis]
+        part1 = scipy.io.loadmat('datasets/chair_voxel/1b5fc54e45c8768490ad276cd2af3a4/part1.mat')['data'][:, :, :, np.newaxis]
+        part2 = scipy.io.loadmat('datasets/chair_voxel/1b5fc54e45c8768490ad276cd2af3a4/part2.mat')['data'][:, :, :, np.newaxis]
+        part3 = scipy.io.loadmat('datasets/chair_voxel/1b5fc54e45c8768490ad276cd2af3a4/part3.mat')['data'][:, :, :, np.newaxis]
 
-        part1_trans = scipy.io.loadmat('datasets/chair_voxel/1c3f1a9cea91359c4c3e19c2c67c262f/part1_trans_matrix.mat')['data'][:3]
-        part2_trans = scipy.io.loadmat('datasets/chair_voxel/1c3f1a9cea91359c4c3e19c2c67c262f/part2_trans_matrix.mat')['data'][:3]
-        part3_trans = scipy.io.loadmat('datasets/chair_voxel/1c3f1a9cea91359c4c3e19c2c67c262f/part3_trans_matrix.mat')['data'][:3]
-        part4_trans = scipy.io.loadmat('datasets/chair_voxel/1c3f1a9cea91359c4c3e19c2c67c262f/part4_trans_matrix.mat')['data'][:3]
+        part1_trans = scipy.io.loadmat('datasets/chair_voxel/1b5fc54e45c8768490ad276cd2af3a4/part1_trans_matrix.mat')['data'][:3]
+        part2_trans = scipy.io.loadmat('datasets/chair_voxel/1b5fc54e45c8768490ad276cd2af3a4/part2_trans_matrix.mat')['data'][:3]
+        part3_trans = scipy.io.loadmat('datasets/chair_voxel/1b5fc54e45c8768490ad276cd2af3a4/part3_trans_matrix.mat')['data'][:3]
 
-        source = tf.cast(tf.expand_dims(tf.stack([part1, part2, part3, part4], axis=0), axis=0), dtype=tf.float32)
+        source = tf.cast(tf.expand_dims(tf.stack([part1, part2, part3], axis=0), axis=0), dtype=tf.float32)
         gt_theta = tf.cast(
-            tf.expand_dims(tf.stack([part1_trans, part2_trans, part3_trans, part4_trans], axis=0), axis=0),
+            tf.expand_dims(tf.stack([part1_trans, part2_trans, part3_trans], axis=0), axis=0),
             dtype=tf.float32)
         outputs = my_model.composer.stn.resampling([source, gt_theta]).numpy()
         # threshold can be changed in order to get better visualization result(similar to de-noising)
         outputs = np.where(outputs > 0.5, 1, 0)
 
+        visualization.visualize(part1[:, :, :, 0], show_axis=True, show_grid=True)
+        visualization.visualize(part2[:, :, :, 0], show_axis=True, show_grid=True)
+        visualization.visualize(part3[:, :, :, 0], show_axis=True, show_grid=True)
         # show parts (you should check if the part is like the unscaled part)
         for part in outputs[0]:
             visualization.visualize(part[:, :, :, 0], show_grid=True, show_axis=True)
