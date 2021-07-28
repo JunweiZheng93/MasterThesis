@@ -124,7 +124,7 @@ python evaluate.py model_path --category the_category_you_want_to_choose
 For example, if you want to evaluate how good you model is for the category `chair` (assume your model is saved in 
 `project_root/results/20210723162046/process_3/checkpoint.h5`), you need to type:
 ```bash
-python evaluate.py project_root/results/20210723162046/process_3/checkpoint.h5
+python evaluate.py results/20210723162046/process_3/checkpoint.h5
 ```
 `chair` is the default category. so you don't need to set value for `--category`.
 
@@ -134,9 +134,25 @@ Single mode allows you to check the evaluation result for one specific shape. Fo
 good you model is for the shape `03001627/1a38407b3036795d19fb4103277a6b93`(it is a shape in catergory `chair`)
 and assume your model is saved in `project_root/results/20210723162046/process_3/checkpoint.h5`, you should type:
 ```bash
-python evaluate.py project_root/results/20210723162046/process_3/checkpoint.h5 --mode single
---single_shape_path datasets/03001627/1a38407b3036795d19fb4103277a6b93/
+cd path_of_the_project_root
+python evaluate.py results/20210723162046/process_3/checkpoint.h5 -m single -s datasets/03001627/1a38407b3036795d19fb4103277a6b93
 ```
+
+### exchange mode
+
+Exchange mode allows you to exchange parts from different shapes. For example, if you want to change part #1 from shape #1 
+and part #1 from shape #2, this is the correct mode for you. Exchange mode will first show the ground truth of the two shape 
+you want to exchange, then it will show you the reconstructed shape of the two shape respectively and finally the exchanged 
+shape will be shown.
+
+Assume your model is saved in `project_root/results/20210723162046/process_3/checkpoint.h5` and the two shape you want to 
+exchange are saved in `03001627/1a38407b3036795d19fb4103277a6b93`, `03001627/1b8e84935fdc3ec82be289de70e8db31`. To run exchange 
+mode, just type:
+```bash
+cd path_of_the_project_root
+python evaluate.py results/20210723162046/process_3/checkpoint.h5 -m exchange -e 03001627/1a38407b3036795d19fb4103277a6b93 1b8e84935fdc3ec82be289de70e8db31 --which_part 1
+```
+
 For more usage of `evaluate.py`, please type:
 ```bash
 python evaluate.py -h
