@@ -1,6 +1,6 @@
 import tensorflow as tf
-import model
 import scipy.io
+import importlib
 import numpy as np
 import os
 import argparse
@@ -41,6 +41,7 @@ def evaluate_model(model_path,
         raise ValueError('mode should be one of batch or single!')
 
     warm_up_data = tf.ones((1, H, W, D, C), dtype=tf.float32)
+    model = importlib.import_module(f"results.{model_path.split('/')[-3]}.model")
     my_model = model.Model(num_parts=num_parts)
     my_model.choose_training_process(1)
     my_model(warm_up_data)
@@ -65,12 +66,12 @@ def evaluate_model(model_path,
             gt_shape = tf.expand_dims(gt_shape, 0)
             gt_shape = tf.expand_dims(gt_shape, 4)
             if visualize_decoded_part:
-                pred = get_pred_label(my_model, gt_shape, visualize_decoded_part, decoded_part_threshold, transformed_part_threshold)
+                pred = _get_pred_label(my_model, gt_shape, visualize_decoded_part, decoded_part_threshold, transformed_part_threshold)
                 pred = pred.numpy().astype('uint8')
                 for part in pred:
                     visualization.visualize(part, title=shape)
             else:
-                pred_label = get_pred_label(my_model, gt_shape, visualize_decoded_part, decoded_part_threshold, transformed_part_threshold)
+                pred_label = _get_pred_label(my_model, gt_shape, visualize_decoded_part, decoded_part_threshold, transformed_part_threshold)
                 pred_label = pred_label.numpy().astype('uint8')
                 visualization.visualize(pred_label, title=shape)
 
@@ -85,17 +86,17 @@ def evaluate_model(model_path,
         gt_shape = tf.expand_dims(gt_shape, 0)
         gt_shape = tf.expand_dims(gt_shape, 4)
         if visualize_decoded_part:
-            pred = get_pred_label(my_model, gt_shape, visualize_decoded_part, decoded_part_threshold, transformed_part_threshold)
+            pred = _get_pred_label(my_model, gt_shape, visualize_decoded_part, decoded_part_threshold, transformed_part_threshold)
             pred = pred.numpy().astype('uint8')
             for part in pred:
                 visualization.visualize(part, title=shape_code)
         else:
-            pred_label = get_pred_label(my_model, gt_shape, visualize_decoded_part, decoded_part_threshold, transformed_part_threshold)
+            pred_label = _get_pred_label(my_model, gt_shape, visualize_decoded_part, decoded_part_threshold, transformed_part_threshold)
             pred_label = pred_label.numpy().astype('uint8')
             visualization.visualize(pred_label, title=shape_code)
 
 
-def get_pred_label(model, gt, visualize_decoded_part=False, decoded_part_threshold=0.125, transformed_part_threshold=0.5):
+def _get_pred_label(model, gt, visualize_decoded_part=False, decoded_part_threshold=0.125, transformed_part_threshold=0.5):
     """
     :param model: tensorflow model
     :param gt: ground truth binary voxel_grid tensor. It has shape (1, H, W, D, C)
