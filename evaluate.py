@@ -18,6 +18,7 @@ def evaluate_model(model_path,
                    num_to_visualize=4,
                    single_shape_path=None,
                    exchange_shape_path=None,
+                   assembly_shape_path=None,
                    which_part=1,
                    H=32,
                    W=32,
@@ -31,15 +32,17 @@ def evaluate_model(model_path,
     if category not in ['chair', 'table', 'airplane', 'lamp']:
         raise ValueError('category should be one of chair, table, airplane and lamp!')
 
-    # check mode
+    # check parameters
     if mode == 'batch':
         num_parts = 3 if category == 'table' else 4
+
     elif mode == 'single':
         if not single_shape_path.endswith('/'):
             single_shape_path += '/'
         category_code = single_shape_path.split('/')[-3]
         category = list(CATEGORY_MAP.keys())[list(CATEGORY_MAP.values()).index(category_code)]
         num_parts = 3 if category == 'table' else 4
+
     elif mode == 'exchange':
         if type(exchange_shape_path) != list:
             raise ValueError(f'exchange_shape_path should be a list. got {type(exchange_shape_path)}')
@@ -61,8 +64,24 @@ def evaluate_model(model_path,
                              f'and {path_2}({list(CATEGORY_MAP.keys())[list(CATEGORY_MAP.values()).index(path_2)]})')
         category = list(CATEGORY_MAP.keys())[list(CATEGORY_MAP.values()).index(path_1_category_code)]
         num_parts = 3 if category == 'table' else 4
+
     elif mode == 'assembly':
-        pass
+        if type(assembly_shape_path) != list:
+            raise ValueError(f'assembly_shape_path should be a list. got {type(assembly_shape_path)}')
+        paths = list()
+        category_codes = list()
+        for each_path in assembly_shape_path:
+            if not each_path.endswith('/'):
+                each_path += '/'
+                paths.append(each_path)
+                code = each_path.split('/')[-3]
+                category_codes.append(code)
+        if len(set(category_codes)) > 1:
+            raise ValueError(f'All shape paths should be from the same category, but now they are '
+                             f'from {len(set(category_codes))} different categories!')
+        category = list(CATEGORY_MAP.keys())[list(CATEGORY_MAP.values()).index(category_codes[0])]
+        num_parts = 3 if category == 'table' else 4
+
     else:
         raise ValueError('mode should be one of batch, single, exchange and assembly!')
 
@@ -74,9 +93,9 @@ def evaluate_model(model_path,
     my_model(warm_up_data)
     my_model.load_weights(model_path)
 
-    dataset_path = os.path.join(PROJ_ROOT, 'datasets', CATEGORY_MAP[category])
-
+    # evaluation for every mode
     if mode == 'batch':
+        dataset_path = os.path.join(PROJ_ROOT, 'datasets', CATEGORY_MAP[category])
         all_shapes = os.listdir(dataset_path)
         idx = np.random.choice(len(all_shapes), num_to_visualize, replace=False)
         shapes_to_visualize = [all_shapes[each] for each in idx]
@@ -87,6 +106,7 @@ def evaluate_model(model_path,
             gt_label = scipy.io.loadmat(gt_label_path)['data']
             visualization.visualize(gt_label, title=shape_code)
 
+            # visualize predicted label
             shape_path = os.path.dirname(gt_label_path)
             gt_shape_path = os.path.join(shape_path, 'object_unlabeled.mat')
             _visualize_pred_label(my_model, 'batch', gt_shape_path, shape_code, visualize_decoded_part,
@@ -98,6 +118,7 @@ def evaluate_model(model_path,
         gt_label = scipy.io.loadmat(os.path.join(single_shape_path, 'object_labeled.mat'))['data']
         visualization.visualize(gt_label, title=shape_code)
 
+        # visualize predicted label
         gt_shape_path = os.path.join(single_shape_path, 'object_unlabeled.mat')
         _visualize_pred_label(my_model, 'single', gt_shape_path, shape_code, visualize_decoded_part,
                               decoded_part_threshold, transformed_part_threshold, which_part)
@@ -111,11 +132,26 @@ def evaluate_model(model_path,
         visualization.visualize(gt_label_1, title=shape_code_1)
         visualization.visualize(gt_label_2, title=shape_code_2)
 
-        # get latent representation
+        # visualize predicted label
         gt_shape_path_1 = os.path.join(exchange_shape_path[0], 'object_unlabeled.mat')
         gt_shape_path_2 = os.path.join(exchange_shape_path[1], 'object_unlabeled.mat')
-        _visualize_pred_label(my_model, 'exchange', (gt_shape_path_1, gt_shape_path_2), (shape_code_1, shape_code_2),
+        _visualize_pred_label(my_model, 'exchange', [gt_shape_path_1, gt_shape_path_2], [shape_code_1, shape_code_2],
                               visualize_decoded_part, decoded_part_threshold, transformed_part_threshold, which_part)
+
+    elif mode == 'assembly':
+        # visualize ground truth label
+        gt_shape_paths = list()
+        shape_codes = list()
+        for path in paths:
+            shape_code = path.split('/')[-2]
+            shape_codes.append(shape_code)
+            gt_shape_paths.append(os.path.join(path, 'object_unlabeled.mat'))
+            gt_label = scipy.io.loadmat(os.path.join(path, 'object_labeled.mat'))['data']
+            visualization.visualize(gt_label, title=shape_code)
+
+        # visualize predicted label
+        _visualize_pred_label(my_model, 'assembly', gt_shape_paths, shape_codes, visualize_decoded_part,
+                              decoded_part_threshold, transformed_part_threshold, which_part)
 
 
 def _visualize_pred_label(model,
@@ -129,13 +165,22 @@ def _visualize_pred_label(model,
     """
     :param model: tensorflow model
     :param mode: valid values are batch, single, exchange and assembly
-    :param shape_path: it should be a tuple when mode is 'exchange', should be a str for other modes
-    :param shape_code: it should be a tuple when mode is 'exchange', should be a str for other modes
-    :param visualize_decoded_part: whether to visualize decoded parts
+    :param shape_path: it should be a list when mode is 'exchange' and 'assembly', should be a str for other modes
+    :param shape_code: it should be a list when mode is 'exchange' and 'assembly', should be a str for other modes
+    :param visualize_decoded_part: whether to visualize decoded parts. only valid for 'batch' and 'single' mode
     :param decoded_part_threshold: threshold for decoded parts to be visualized
     :param transformed_part_threshold: threshold for transformed parts to be visualized
     :param which_part: which part to be exchange. only valid when mode is 'exchange'
     """
+
+    def _get_pred_label(pred):
+        code = 0
+        for idx, each_part in enumerate(pred):
+            code += each_part * 2 ** (idx + 1)
+        pred_label = tf.math.floor(tf.experimental.numpy.log2(code + 1))
+        pred_label = pred_label.numpy().astype('uint8')
+        return pred_label
+
     if mode == 'exchange':
         gt_shape_path_1 = shape_path[0]
         gt_shape_path_2 = shape_path[1]
@@ -153,16 +198,8 @@ def _visualize_pred_label(model,
             pred_1 = tf.squeeze(tf.where(model.composer.stn_output_fmap > transformed_part_threshold, 1., 0.))
             model.composer(latent_2)
             pred_2 = tf.squeeze(tf.where(model.composer.stn_output_fmap > transformed_part_threshold, 1., 0.))
-            code_1 = 0
-            code_2 = 0
-            for idx, each_part in enumerate(pred_1):
-                code_1 += each_part * 2 ** (idx + 1)
-            for idx, each_part in enumerate(pred_2):
-                code_2 += each_part * 2 ** (idx + 1)
-            pred_label_1 = tf.math.floor(tf.experimental.numpy.log2(code_1 + 1))
-            pred_label_2 = tf.math.floor(tf.experimental.numpy.log2(code_2 + 1))
-            pred_label_1 = pred_label_1.numpy().astype('uint8')
-            pred_label_2 = pred_label_2.numpy().astype('uint8')
+            pred_label_1 = _get_pred_label(pred_1)
+            pred_label_2 = _get_pred_label(pred_2)
             visualization.visualize(pred_label_1, title=shape_code[0])
             visualization.visualize(pred_label_2, title=shape_code[1])
 
@@ -181,6 +218,18 @@ def _visualize_pred_label(model,
         # visualize pred_label after exchange
         _visualize_exchange_pred_label(latent_1, latent_2, shape_code)
 
+    elif mode == 'assembly':
+        model.choose_training_process(3, mode='cycle')
+        gt_shapes_list = list()
+        for path in shape_path:
+            gt_shapes_list.append(scipy.io.loadmat(path)['data'][:, :, :, np.newaxis])
+        gt_shape = tf.convert_to_tensor(gt_shapes_list, dtype=tf.float32)
+        model(gt_shape, mode='mix')
+        pred = tf.squeeze(tf.where(model.composer.stn_output_fmap > transformed_part_threshold, 1., 0.))
+        for each_pred, code in zip(pred, shape_code):
+            pred_label = _get_pred_label(each_pred)
+            visualization.visualize(pred_label, title=code)
+
     else:
         gt_shape = tf.convert_to_tensor(scipy.io.loadmat(shape_path)['data'], dtype=tf.float32)
         gt_shape = tf.expand_dims(gt_shape, 0)
@@ -193,11 +242,7 @@ def _visualize_pred_label(model,
                 visualization.visualize(part, title=shape_code)
         else:
             pred = tf.squeeze(tf.where(model.composer.stn_output_fmap > transformed_part_threshold, 1., 0.))
-            code = 0
-            for idx, each_part in enumerate(pred):
-                code += each_part * 2 ** (idx + 1)
-            pred_label = tf.math.floor(tf.experimental.numpy.log2(code+1))
-            pred_label = pred_label.numpy().astype('uint8')
+            pred_label = _get_pred_label(pred)
             visualization.visualize(pred_label, title=shape_code)
 
 
@@ -216,6 +261,7 @@ if __name__ == '__main__':
                                                           'datasets/03001627/1a6f615e8b1b5ae4dbbc9440457e303e. Only '
                                                           'valid when \'mode\' is \'single\'')
     parser.add_argument('-e', '--exchange_shape_path', nargs='*', help='2 shape paths used to exchange parts')
+    parser.add_argument('-a', '--assembly_shape_path', nargs='*', help='shape paths for assembly mode')
     parser.add_argument('-w', '--which_part', default=1, help='which part to be exchanged. Only valid when mode is \'exchange\'')
     parser.add_argument('-H', default=32, help='height of the shape voxel grid. Default is 32')
     parser.add_argument('-W', default=32, help='width of the shape voxel grid. Default is 32')
@@ -233,6 +279,7 @@ if __name__ == '__main__':
                    num_to_visualize=int(args.num_to_visualize),
                    single_shape_path=args.single_shape_path,
                    exchange_shape_path=args.exchange_shape_path,
+                   assembly_shape_path=args.assembly_shape_path,
                    which_part=int(args.which_part),
                    H=int(args.H),
                    W=int(args.W),
