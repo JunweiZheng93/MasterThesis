@@ -108,7 +108,7 @@ class SharedPartDecoder(keras.layers.Layer):
         self.deconv2 = layers.Conv3DTranspose(64, 3, (2, 2, 2), padding='same', output_padding=(1, 1, 1))
         self.deconv3 = layers.Conv3DTranspose(32, 5, (2, 2, 2), padding='same', output_padding=(1, 1, 1))
         self.deconv4 = layers.Conv3DTranspose(16, 5, (1, 1, 1), padding='same', output_padding=(0, 0, 0))
-        self.deconv5 = layers.Conv3DTranspose(1, 5, (2, 2, 2), padding='same', output_padding=(1, 1, 1))
+        self.deconv5 = layers.Conv3DTranspose(1, 5, (2, 2, 2), padding='same', output_padding=(1, 1, 1), activation='sigmoid')
 
         self.act = layers.LeakyReLU()
         self.act1 = layers.LeakyReLU()
@@ -121,7 +121,6 @@ class SharedPartDecoder(keras.layers.Layer):
         self.bn2 = layers.BatchNormalization()
         self.bn3 = layers.BatchNormalization()
         self.bn4 = layers.BatchNormalization()
-        self.bn5 = layers.BatchNormalization()
 
         self.dropout = layers.Dropout(0.2)
         self.dropout1 = layers.Dropout(0.2)
@@ -160,8 +159,7 @@ class SharedPartDecoder(keras.layers.Layer):
         x = self.bn4(x, training=training)
         x = self.dropout4(x, training=training)
 
-        x = self.deconv5(x)
-        outputs = self.bn5(x, training=training)
+        outputs = self.deconv5(x)
 
         return outputs
 
@@ -650,7 +648,7 @@ class Model(keras.Model):
                     part_recon_loss = self._cal_part_reconstruction_loss(label, self.composer.stacked_decoded_parts)
                     trans_loss = self._cal_transformation_loss(trans, self.composer.stn.theta)
                     shape_recon_loss = self._cal_shape_reconstruction_loss(x, tf.reduce_sum(self.composer.stn_output_fmap, axis=1))
-                    total_loss = pi_loss + part_recon_loss + 100 * trans_loss + 0.01 * shape_recon_loss
+                    total_loss = pi_loss + 10 * part_recon_loss + 100 * trans_loss + 0.01 * shape_recon_loss
 
                 grads = tape.gradient(total_loss, self.trainable_weights)
                 self.optimizer.apply_gradients(zip(grads, self.trainable_weights))
