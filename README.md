@@ -135,7 +135,7 @@ good you model is for the shape `03001627/1a38407b3036795d19fb4103277a6b93`(it i
 and assume your model is saved in `project_root/results/20210723162046/process_3/checkpoint.h5`, you should type:
 ```bash
 cd path_of_the_project_root
-python evaluate.py results/20210723162046/process_3/checkpoint.h5 -m single -s datasets/03001627/1a38407b3036795d19fb4103277a6b93
+python evaluate.py results/20210723162046/process_3/checkpoint.h5 -m single -s 03001627/1a38407b3036795d19fb4103277a6b93
 ```
 
 ### exchange mode
@@ -150,7 +150,20 @@ exchange are saved in `03001627/1a38407b3036795d19fb4103277a6b93`, `03001627/1b8
 mode, just type:
 ```bash
 cd path_of_the_project_root
-python evaluate.py results/20210723162046/process_3/checkpoint.h5 -m exchange -e 03001627/1a38407b3036795d19fb4103277a6b93 1b8e84935fdc3ec82be289de70e8db31 --which_part 1
+python evaluate.py results/20210723162046/process_3/checkpoint.h5 -m exchange -e 03001627/1a38407b3036795d19fb4103277a6b93 03001627/1b8e84935fdc3ec82be289de70e8db31 --which_part 1
+```
+
+### assembly mode
+
+This mode is used to assemble parts within a batch randomly. It will firstly show the ground truth of every shape and then 
+the random assembled shapes.
+
+Assume your model is saved in `project_root/results/20210723162046/process_3/checkpoint.h5` and the shapes used as ground truth 
+are saved in `03001627/1a38407b3036795d19fb4103277a6b93`, `03001627/1b8e84935fdc3ec82be289de70e8db31`, and 
+`03001627/1f571e244384bca736b0f2a1430e993a`. To run assembly mode, just type:
+```bash
+cd path_of_the_project_root
+python evaluate.py results/20210723162046/process_3/checkpoint.h5 -m assembly -a 03001627/1a38407b3036795d19fb4103277a6b93 03001627/1b8e84935fdc3ec82be289de70e8db31 03001627/1f571e244384bca736b0f2a1430e993a
 ```
 
 For more usage of `evaluate.py`, please type:

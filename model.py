@@ -420,10 +420,9 @@ class Composer(keras.layers.Layer):
 
         # stacked_decoded_part should be in the shape of (B, num_parts, H, W, D, C)
         self.stacked_decoded_parts = tf.stack(decoder_outputs, axis=1)
-        binary_stacked_decoded_parts = tf.where(self.stacked_decoded_parts > self.decoded_part_threshold, 1., 0.)
         # summed_inputs should be in the shape of (B, encoding_dims)
         summed_inputs = tf.reduce_sum(inputs, axis=1)
-        localization_inputs = (binary_stacked_decoded_parts, summed_inputs)
+        localization_inputs = (self.stacked_decoded_parts, summed_inputs)
         # binary_output_fmap has shape (B, num_parts, H, W, D, C)
         self.stn_output_fmap = self.stn(localization_inputs, training=training)
         binary_output_fmap = tf.where(self.stn_output_fmap >= self.transformed_part_threshold, 1., 0.)
